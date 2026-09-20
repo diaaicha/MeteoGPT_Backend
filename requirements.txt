@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # METEOGPT BACKEND - RUNTIME DEPENDENCIES
 # ============================================================
 
@@ -9,3 +9,14 @@ pydantic-settings
 python-dotenv
 python-multipart
 httpx
+
+
+# IA / RAG MeteoGPT
+numpy
+langgraph
+qdrant-client
+rank-bm25
+torch
+transformers
+google-genai
+tzdata
