@@ -1,4 +1,8 @@
-﻿fastapi
+# ============================================================
+# METEOGPT BACKEND - RUNTIME DEPENDENCIES
+# ============================================================
+
+fastapi
 uvicorn[standard]
 pydantic
 pydantic-settings
