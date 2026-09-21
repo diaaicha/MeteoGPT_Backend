@@ -2170,3 +2170,316 @@ Réponse MeteoGPT
 ```
 
 Cette solution reste volontairement légère, locale et proportionnée aux besoins du PFE MeteoGPT.
+
+
+---
+
+# 27. B6 - Actualisation ANACIM
+
+## Objectif
+
+B6 permet au backend MeteoGPT d'actualiser le corpus météorologique à partir de l'API ANACIM sans reconstruire entièrement Qdrant.
+
+Pipeline :
+
+```text
+API ANACIM
+-> détection new / modified / resume_processing
+-> téléchargement ou reprise du PDF local
+-> extraction
+-> chunks
+-> embeddings
+-> mise à jour JSON
+-> mise à jour incrémentale Qdrant
+-> actualisation du registre
+-> refresh BM25
+```
+
+## Endpoint d'administration
+
+```text
+POST /api/v1/admin/update
+```
+
+Par défaut :
+
+```json
+{
+  "dry_run": true
+}
+```
+
+Le dry-run interroge l'API ANACIM et détecte les bulletins à traiter sans modifier le corpus.
+
+## Activer ou désactiver l'actualisation
+
+Variable de configuration :
+
+```text
+ENABLE_ADMIN_UPDATE=true
+```
+
+- `true` : le service d'actualisation est autorisé ;
+- `false` : le service retourne `admin_update_disabled`.
+
+> `ENABLE_ADMIN_UPDATE` est un interrupteur de fonctionnalité. Il ne constitue pas une authentification administrateur.
+
+## Lancer un dry-run
+
+```powershell
+python -c "import json; from backend.app.services.update_service import run_anacim_update; print(json.dumps(run_anacim_update(dry_run=True), ensure_ascii=False, indent=2, default=str))"
+```
+
+## Lancer une actualisation réelle
+
+```powershell
+python -c "import json; from backend.app.services.update_service import run_anacim_update; print(json.dumps(run_anacim_update(dry_run=False), ensure_ascii=False, indent=2, default=str))"
+```
+
+## Mise à jour incrémentale de Qdrant
+
+L'actualisation Qdrant est incrémentale.
+
+Pour un nouveau document :
+
+```text
+nouveaux chunks
+-> nouveaux embeddings
+-> upsert Qdrant
+```
+
+La collection existante n'est pas supprimée.
+
+Pour un document modifié :
+
+```text
+source_file du document modifié
+-> suppression ciblée des anciens points
+-> upsert des nouveaux points
+```
+
+Les autres documents présents dans la collection restent inchangés.
+
+Le pipeline peut réutiliser le client Qdrant déjà ouvert par le Retriever afin d'éviter l'ouverture simultanée de plusieurs clients sur le même stockage local.
+
+## Reprise après interruption
+
+Si un bulletin a été téléchargé mais que le pipeline échoue avant la fin du traitement, son état permet une reprise avec :
+
+```text
+resume_processing
+```
+
+Si le PDF local existe, est un fichier valide et possède une taille supérieure à zéro, il est réutilisé sans nouveau téléchargement réseau.
+
+Les indicateurs suivants permettent de distinguer les cas :
+
+```text
+pdf_ready
+pdf_downloaded
+pdf_reused
+```
+
+Exemple de reprise :
+
+```text
+pdf_ready      = 4
+pdf_downloaded = 0
+pdf_reused     = 4
+```
+
+## Synchronisation avec le Retriever
+
+Après une actualisation réussie :
+
+```text
+Qdrant mis à jour
+-> refresh_bm25_index()
+-> Retriever hybride synchronisé
+```
+
+BM25 n'est pas reconstruit :
+
+- pendant un `dry_run` ;
+- lorsque le pipeline retourne `no_update` ;
+- lorsque l'actualisation échoue.
+
+## Dépendance PyMuPDF
+
+Le pipeline utilise PyMuPDF pour l'extraction des PDF.
+
+Dépendance runtime :
+
+```text
+pymupdf
+```
+
+Import utilisé dans le pipeline :
+
+```python
+import pymupdf as fitz
+```
+
+## Tests B6
+
+Tests ciblés du pipeline d'actualisation :
+
+```powershell
+pytest .\backend\tests\test_update_pipeline.py -q
+```
+
+Tests du service :
+
+```powershell
+pytest .\backend\tests\test_update_service.py -q
+```
+
+Tests de l'endpoint admin :
+
+```powershell
+pytest .\backend\tests\test_admin_update.py -q
+```
+
+Tests complets du backend :
+
+```powershell
+pytest .\backend\tests -q
+```
+
+Résultat validé à la fin de B6 :
+
+```text
+31 passed
+```
+
+## Validation réelle de l'actualisation
+
+### État avant actualisation
+
+```text
+PDF RAW              : 39
+Documents distincts  : 39
+Chunks JSON           : 345
+Embeddings JSON       : 345
+Points Qdrant         : 345
+Dimension Qdrant      : 768
+```
+
+### Bulletins ajoutés le 21-09-2026
+
+```text
+Bulletin_Marine nationale_21-09-2026.pdf
+Bulletin_Meteo soir_21-09-2026.pdf
+Bulletin_Navigation cotiere_21-09-2026.pdf
+Bulletin_Peche artisanale_21-09-2026.pdf
+```
+
+Nombre de nouveaux chunks :
+
+```text
+Marine nationale     : 4
+Meteo soir           : 7
+Navigation cotiere   : 6
+Peche artisanale     : 3
+Total                : 20
+```
+
+### État après actualisation
+
+```text
+Documents distincts  : 43
+Chunks JSON           : 365
+Embeddings JSON       : 365
+Points Qdrant         : 365
+BM25 chunks           : 365
+BM25 localites        : 19
+```
+
+La collection Qdrant est passée de :
+
+```text
+345 -> 365 points
+```
+
+Les 345 anciens points ont été conservés et seuls les 20 nouveaux points ont été ajoutés.
+
+## Validation du registre
+
+Les quatre bulletins du 21-09-2026 ont été enregistrés avec :
+
+```text
+update_status = processed
+processed_at  = renseigné
+```
+
+Après traitement :
+
+```text
+bulletins_a_traiter = 0
+```
+
+## Validation de l'idempotence
+
+Une seconde exécution réelle du service d'actualisation a retourné :
+
+```text
+status = no_update
+bulletins_a_traiter = 0
+bm25_refresh = null
+```
+
+Le nombre de points Qdrant est resté :
+
+```text
+365
+```
+
+Cela confirme qu'une exécution répétée n'ajoute pas de doublons et ne reconstruit pas inutilement le corpus.
+
+## Architecture B6 validée
+
+```text
+POST /api/v1/admin/update
+        |
+        v
+update_service.py
+        |
+        v
+meteogpt_update_api_pipeline.py
+        |
+        +--> API ANACIM
+        |
+        +--> registre API
+        |
+        +--> PDF locaux
+        |
+        +--> extraction
+        |
+        +--> chunks
+        |
+        +--> embeddings
+        |
+        +--> Qdrant incrémental
+        |
+        v
+refresh_bm25_index()
+        |
+        v
+Retriever synchronisé
+```
+
+## État final B6
+
+```text
+Pipeline update ANACIM          : validé
+Dry-run                         : validé
+Update réel                     : validé
+Reprise après interruption      : validée
+Qdrant incrémental              : validé
+Remplacement ciblé              : validé
+Client Qdrant partagé           : validé
+Refresh BM25                    : validé
+Endpoint admin                  : validé
+Idempotence                     : validée
+Tests backend                   : 31 passed
+```

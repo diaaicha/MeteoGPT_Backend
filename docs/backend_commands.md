@@ -712,3 +712,10 @@ python -c "from datetime import datetime; from zoneinfo import ZoneInfo; from ra
 python -c "from datetime import datetime; from zoneinfo import ZoneInfo; from rag_pipeline import process_text_request; r=process_text_request('En regardant le visuel météo, quelles températures sont indiquées pour Dakar ?', thread_id='backend-b4-multimodal-post-migration', now=datetime(2026,9,17,17,0,tzinfo=ZoneInfo('Africa/Dakar'))); print(r)"
 
 python -c "from datetime import datetime; from zoneinfo import ZoneInfo; from rag_pipeline import process_text_request; r=process_text_request('Quel temps est prévu à Dakar ?', thread_id='backend-b4-post-migration', now=datetime(2026,9,17,17,0,tzinfo=ZoneInfo('Africa/Dakar'))); print(r)"
+
+
+
+# lancer le pipeline update
+
+
+ python -c "import json; from src.meteogpt_update_api_pipeline import update_api_pipeline; result = update_api_pipeline(dry_run=True); print(json.dumps(result, ensure_ascii=False, indent=2))"
