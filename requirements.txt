@@ -13,6 +13,7 @@ httpx
 
 # IA / RAG MeteoGPT
 numpy
+pymupdf
 langgraph
 qdrant-client
 rank-bm25

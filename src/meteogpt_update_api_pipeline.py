@@ -1041,10 +1041,41 @@ def telecharger_bulletins_api(
                 nom_pdf
             )
 
-            telecharger_un_pdf(
-                chemin,
-                destination
+            # --------------------------------------------------------
+            # Reprise après interruption
+            # --------------------------------------------------------
+            # Si le bulletin avait déjà été téléchargé lors d'une
+            # exécution précédente interrompue, on réutilise le PDF
+            # local au lieu de le télécharger une seconde fois.
+            # --------------------------------------------------------
+
+            is_resume = (
+                bulletin.get("update_status")
+                == "resume_processing"
             )
+
+            local_pdf_reusable = (
+                is_resume
+                and destination.exists()
+                and destination.is_file()
+                and destination.stat().st_size > 0
+            )
+
+
+            bulletin["pdf_reused"] = bool(
+                local_pdf_reusable
+            )
+
+            bulletin["pdf_downloaded_network"] = bool(
+                not local_pdf_reusable
+            )
+
+            if not local_pdf_reusable:
+
+                telecharger_un_pdf(
+                    chemin,
+                    destination
+                )
 
             bulletin["source_file"] = nom_pdf
 
@@ -1402,7 +1433,7 @@ def construire_text_units_api(
 
     try:
 
-        import fitz
+        import pymupdf as fitz
 
     except ImportError:
 
@@ -1647,7 +1678,7 @@ def construire_page_image_units_api(
 
     try:
 
-        import fitz
+        import pymupdf as fitz
 
     except ImportError:
 
@@ -4195,26 +4226,36 @@ def construire_payload_qdrant_api(
 def indexer_qdrant_api(
     chunks: List[Dict[str, Any]],
     embeddings: List[Dict[str, Any]],
-    config: MeteoGPTApiConfig
+    config: MeteoGPTApiConfig,
+    qdrant_client=None,
+    source_files_to_replace: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
-    Indexe les chunks et embeddings dans Qdrant local.
+    Met à jour incrémentalement la collection Qdrant.
 
-    Principe :
+    Principes :
     - un point Qdrant par chunk ;
-    - le vecteur vient de embeddings_api.json ;
-    - les métadonnées du chunk sont stockées dans le payload.
+    - aucune suppression globale de la collection existante ;
+    - les points des documents retraités sont supprimés par source_file ;
+    - les nouveaux points sont ensuite ajoutés par upsert ;
+    - un client Qdrant existant peut être réutilisé par le backend.
     """
 
     try:
-
         from qdrant_client import QdrantClient
-        from qdrant_client.models import Distance, VectorParams, PointStruct
+        from qdrant_client.models import (
+            Distance,
+            VectorParams,
+            PointStruct,
+            Filter,
+            FieldCondition,
+            MatchValue,
+            FilterSelector,
+        )
 
     except ImportError:
-
         raise ImportError(
-            "❌ qdrant-client n'est pas installé. Exécute : !pip install -q qdrant-client"
+            "qdrant-client n'est pas installé."
         )
 
     created_at = datetime.now().isoformat(
@@ -4222,38 +4263,30 @@ def indexer_qdrant_api(
     )
 
     if not chunks:
-
         raise ValueError(
-            "❌ Aucun chunk fourni pour l'indexation Qdrant."
+            "Aucun chunk fourni pour l'indexation Qdrant."
         )
 
     if not embeddings:
-
         raise ValueError(
-            "❌ Aucun embedding fourni pour l'indexation Qdrant."
+            "Aucun embedding fourni pour l'indexation Qdrant."
         )
 
     embeddings_by_chunk_id = {
-        item.get("chunk_id"):
-            item
+        item.get("chunk_id"): item
         for item in embeddings
         if item.get("chunk_id")
     }
 
     points = []
-
     missing_embeddings = []
-
     vector_size = None
 
     for chunk in chunks:
 
-        chunk_id = chunk.get(
-            "chunk_id"
-        )
+        chunk_id = chunk.get("chunk_id")
 
         if not chunk_id:
-
             continue
 
         embedding_item = embeddings_by_chunk_id.get(
@@ -4261,11 +4294,9 @@ def indexer_qdrant_api(
         )
 
         if embedding_item is None:
-
             missing_embeddings.append(
                 chunk_id
             )
-
             continue
 
         vector = embedding_item.get(
@@ -4273,56 +4304,43 @@ def indexer_qdrant_api(
         )
 
         if not vector:
-
             missing_embeddings.append(
                 chunk_id
             )
-
             continue
 
         if vector_size is None:
+            vector_size = len(vector)
 
-            vector_size = len(
-                vector
+        elif len(vector) != vector_size:
+            raise ValueError(
+                "Dimensions d'embeddings incohérentes."
             )
-
-        point_id = stable_uuid(
-            chunk_id
-        )
-
-        payload = construire_payload_qdrant_api(
-            chunk
-        )
 
         point = PointStruct(
-            id=point_id,
+            id=stable_uuid(chunk_id),
             vector=vector,
-            payload=payload
+            payload=construire_payload_qdrant_api(
+                chunk
+            ),
         )
 
-        points.append(
-            point
-        )
+        points.append(point)
 
     if missing_embeddings:
-
         raise ValueError(
-            "❌ Certains chunks n'ont pas d'embedding associé. Exemples : "
-            + str(
-                missing_embeddings[:10]
-            )
+            "Certains chunks n'ont pas d'embedding associé. "
+            f"Exemples : {missing_embeddings[:10]}"
         )
 
     if not points:
-
         raise ValueError(
-            "❌ Aucun point Qdrant construit."
+            "Aucun point Qdrant construit."
         )
 
     if vector_size is None:
-
         raise ValueError(
-            "❌ Dimension vectorielle introuvable."
+            "Dimension vectorielle introuvable."
         )
 
     config.qdrant_dir.mkdir(
@@ -4330,131 +4348,178 @@ def indexer_qdrant_api(
         exist_ok=True
     )
 
-    client = QdrantClient(
-        path=str(
-            config.qdrant_dir
+    client_owned = False
+
+    if qdrant_client is None:
+
+        client = QdrantClient(
+            path=str(
+                config.qdrant_dir
+            )
         )
-    )
 
-    existing_collections = [
-        collection.name
-        for collection in client.get_collections().collections
-    ]
+        client_owned = True
 
-    recreate_collection = True
+    else:
 
-    if (
-        config.collection_name in existing_collections
-        and recreate_collection
-    ):
+        if not isinstance(
+            qdrant_client,
+            QdrantClient
+        ):
+            raise TypeError(
+                "qdrant_client doit être une instance de QdrantClient."
+            )
 
-        client.delete_collection(
+        client = qdrant_client
+
+    try:
+
+        existing_collections = {
+            collection.name
+            for collection
+            in client.get_collections().collections
+        }
+
+        # ----------------------------------------------------
+        # Création uniquement si la collection n'existe pas
+        # ----------------------------------------------------
+
+        if config.collection_name not in existing_collections:
+
+            client.create_collection(
+                collection_name=config.collection_name,
+                vectors_config=VectorParams(
+                    size=vector_size,
+                    distance=Distance.COSINE,
+                ),
+            )
+
+        else:
+
+            collection_info = client.get_collection(
+                collection_name=config.collection_name
+            )
+
+            existing_vectors = (
+                collection_info
+                .config
+                .params
+                .vectors
+            )
+
+            existing_vector_size = getattr(
+                existing_vectors,
+                "size",
+                None
+            )
+
+            if (
+                existing_vector_size is not None
+                and existing_vector_size != vector_size
+            ):
+                raise ValueError(
+                    "Dimension Qdrant incompatible : "
+                    f"collection={existing_vector_size}, "
+                    f"embeddings={vector_size}."
+                )
+
+        # ----------------------------------------------------
+        # Suppression ciblée des anciennes versions
+        # ----------------------------------------------------
+
+        replaced_sources = sorted(
+            {
+                Path(str(source_file)).name
+                for source_file in (
+                    source_files_to_replace or []
+                )
+                if source_file
+            }
+        )
+
+        for source_file in replaced_sources:
+
+            client.delete(
+                collection_name=config.collection_name,
+                points_selector=FilterSelector(
+                    filter=Filter(
+                        must=[
+                            FieldCondition(
+                                key="source_file",
+                                match=MatchValue(
+                                    value=source_file
+                                ),
+                            )
+                        ]
+                    )
+                ),
+                wait=True,
+            )
+
+        # ----------------------------------------------------
+        # Upsert des nouveaux points
+        # ----------------------------------------------------
+
+        client.upsert(
+            collection_name=config.collection_name,
+            points=points,
+            wait=True,
+        )
+
+        collection_info = client.get_collection(
             collection_name=config.collection_name
         )
 
-    if config.collection_name not in [
-        collection.name
-        for collection in client.get_collections().collections
-    ]:
+        audit = {
+            "processing_step": "B6_INCREMENTAL_UPDATE",
+            "pipeline": "API_EXPORT",
+            "created_at": created_at,
+            "collection_name": config.collection_name,
+            "qdrant_dir": str(
+                config.qdrant_dir
+            ),
+            "vector_size": vector_size,
+            "distance": "COSINE",
+            "chunks_input": len(chunks),
+            "embeddings_input": len(embeddings),
+            "points_upserted": len(points),
+            "source_files_replaced": replaced_sources,
+            "collection_points_count":
+                collection_info.points_count,
+        }
 
-        client.create_collection(
-            collection_name=config.collection_name,
-            vectors_config=VectorParams(
-                size=vector_size,
-                distance=Distance.COSINE
-            )
+        save_json(
+            audit,
+            config.qdrant_audit_file
         )
 
-    client.upsert(
-        collection_name=config.collection_name,
-        points=points
-    )
+        return {
+            "status": "success",
+            "collection_name":
+                config.collection_name,
+            "qdrant_dir":
+                str(config.qdrant_dir),
+            "points_indexed":
+                len(points),
+            "points_upserted":
+                len(points),
+            "source_files_replaced":
+                replaced_sources,
+            "collection_points_count":
+                collection_info.points_count,
+            "vector_size":
+                vector_size,
+            "distance":
+                "COSINE",
+            "audit_file":
+                str(config.qdrant_audit_file),
+        }
 
-    collection_info = client.get_collection(
-        collection_name=config.collection_name
-    )
+    finally:
 
-    audit = {
-        "processing_step":
-            "3.5.9.4",
+        if client_owned:
 
-        "pipeline":
-            "API_EXPORT",
-
-        "created_at":
-            created_at,
-
-        "collection_name":
-            config.collection_name,
-
-        "qdrant_dir":
-            str(
-                config.qdrant_dir
-            ),
-
-        "vector_size":
-            vector_size,
-
-        "distance":
-            "COSINE",
-
-        "chunks_input":
-            len(
-                chunks
-            ),
-
-        "embeddings_input":
-            len(
-                embeddings
-            ),
-
-        "points_indexed":
-            len(
-                points
-            ),
-
-        "missing_embeddings":
-            len(
-                missing_embeddings
-            ),
-
-        "collection_points_count":
-            collection_info.points_count
-    }
-
-    save_json(
-        audit,
-        config.qdrant_audit_file
-    )
-
-    return {
-        "status":
-            "success",
-
-        "collection_name":
-            config.collection_name,
-
-        "qdrant_dir":
-            str(
-                config.qdrant_dir
-            ),
-
-        "points_indexed":
-            len(
-                points
-            ),
-
-        "vector_size":
-            vector_size,
-
-        "distance":
-            "COSINE",
-
-        "audit_file":
-            str(
-                config.qdrant_audit_file
-            )
-    }
+            client.close()
 
 # ============================================================
 # FONCTION PRINCIPALE EXPORTABLE
@@ -4464,7 +4529,8 @@ def update_api_pipeline(
     root_dir: Optional[str] = None,
     api_url: str = "http://213.154.77.59:8000/mat/api_meteo.php",
     collection_name: str = "meteogpt_api_chunks",
-    dry_run: bool = False
+    dry_run: bool = False,
+    qdrant_client=None
 ) -> Dict[str, Any]:
     """
     Fonction principale d'actualisation API MeteoGPT.
@@ -4602,8 +4668,24 @@ def update_api_pipeline(
             config
         )
 
-        result["counts"]["pdf_downloaded"] = len(
+        result["counts"]["pdf_ready"] = len(
             pdf_paths
+        )
+
+        result["counts"]["pdf_downloaded"] = sum(
+            1
+            for bulletin in bulletins_a_traiter
+            if bulletin.get(
+                "pdf_downloaded_network"
+            )
+        )
+
+        result["counts"]["pdf_reused"] = sum(
+            1
+            for bulletin in bulletins_a_traiter
+            if bulletin.get(
+                "pdf_reused"
+            )
         )
 
         result["files"]["pdf_paths"] = [
@@ -4612,7 +4694,10 @@ def update_api_pipeline(
         ]
 
         logger.info(
-            f"PDF téléchargés : {len(pdf_paths)}"
+            "PDF prêts : %s | téléchargés : %s | réutilisés : %s",
+            result["counts"]["pdf_ready"],
+            result["counts"]["pdf_downloaded"],
+            result["counts"]["pdf_reused"],
         )
 
         # ----------------------------------------------------
@@ -4782,14 +4867,32 @@ def update_api_pipeline(
             all_embeddings
         )
 
+        source_files_to_replace = [
+            nom_pdf_depuis_url(
+                bulletin.get("chemin", "")
+            )
+            for bulletin in bulletins_a_traiter
+            if (
+                bulletin.get("chemin")
+                and bulletin.get("update_status")
+                in {
+                    "modified",
+                    "resume_processing",
+                }
+            )
+        ]
+
+
         # ----------------------------------------------------
         # 9. Indexation Qdrant
         # ----------------------------------------------------
 
         qdrant_result = indexer_qdrant_api(
-            all_chunks,
-            all_embeddings,
-            config
+            new_chunks,
+            new_embeddings,
+            config,
+            qdrant_client=qdrant_client,
+            source_files_to_replace=source_files_to_replace,
         )
 
         result["qdrant"] = qdrant_result
