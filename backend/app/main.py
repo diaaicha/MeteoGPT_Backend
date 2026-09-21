@@ -4,6 +4,13 @@ from backend.app.api.routes.health import router as health_router
 from backend.app.core.config import get_settings
 from backend.app.api.routes.chat import router as chat_router
 
+from backend.app.core.logging import (
+    configure_logging,
+)
+
+from backend.app.middleware.request_logging import (
+    request_logging_middleware,
+)
 
 def create_app() -> FastAPI:
     """
@@ -11,6 +18,8 @@ def create_app() -> FastAPI:
     """
 
     settings = get_settings()
+
+    configure_logging()
 
     application = FastAPI(
         title=settings.app_name,
@@ -22,6 +31,10 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+    )
+
+    application.middleware("http")(
+        request_logging_middleware
     )
 
     application.include_router(

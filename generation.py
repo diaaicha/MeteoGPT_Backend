@@ -1508,35 +1508,6 @@ def appeler_gemini(
             else None
         )
 
-        print(
-            "GEMINI FINISH_REASON =",
-            getattr(
-                candidate,
-                "finish_reason",
-                None
-            )
-        )
-
-        print(
-            "GEMINI USAGE_METADATA =",
-            getattr(
-                response,
-                "usage_metadata",
-                None
-            )
-        )
-
-        print(
-            "GEMINI RESPONSE_TEXT =",
-            repr(
-                getattr(
-                    response,
-                    "text",
-                    None
-                )
-            )
-        )
-
         answer = (
             getattr(
                 response,
