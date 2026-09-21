@@ -5,6 +5,7 @@ import json
 import re
 import time
 import unicodedata
+import atexit
 
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -125,6 +126,7 @@ query_tokenizer = None
 query_embedding_model = None
 
 qdrant_client = None
+qdrant_client_owned = False
 
 _INITIALIZED = False
 
@@ -524,15 +526,25 @@ def encoder_requete(
 # 7. QDRANT
 # ============================================================
 
+# ============================================================
+# 7. QDRANT
+# ============================================================
+
+qdrant_client = None
+qdrant_client_owned = False
+
+
 def set_qdrant_client(
     client
 ):
     """
     Permet de réutiliser un client déjà ouvert,
-    notamment dans le notebook Colab.
+    notamment dans le notebook Colab ou plus tard
+    dans le backend FastAPI.
     """
 
     global qdrant_client
+    global qdrant_client_owned
 
     if not isinstance(
         client,
@@ -542,12 +554,18 @@ def set_qdrant_client(
             "client doit être une instance de QdrantClient."
         )
 
+    # Si un client local avait été créé par ce module,
+    # on le ferme proprement avant de le remplacer.
+    fermer_client_qdrant_actif()
+
     qdrant_client = client
+    qdrant_client_owned = False
 
 
 def obtenir_client_qdrant_actif():
 
     global qdrant_client
+    global qdrant_client_owned
 
     if isinstance(
         qdrant_client,
@@ -561,9 +579,35 @@ def obtenir_client_qdrant_actif():
         )
     )
 
+    qdrant_client_owned = True
+
     return qdrant_client
 
 
+def fermer_client_qdrant_actif():
+
+    global qdrant_client
+    global qdrant_client_owned
+
+    if (
+        isinstance(
+            qdrant_client,
+            QdrantClient
+        )
+        and
+        qdrant_client_owned
+    ):
+        try:
+            qdrant_client.close()
+        except Exception:
+            pass
+
+    qdrant_client = None
+    qdrant_client_owned = False
+
+atexit.register(
+    fermer_client_qdrant_actif
+)
 # ============================================================
 # 8. DÉTECTION DE LA CATÉGORIE
 # ============================================================

@@ -2032,6 +2032,12 @@ def detecter_besoin_visuel(
         r"\bque montre\b",
         r"\binterpreter.*carte\b",
         r"\banalyser.*image\b",
+
+        r"\bce visuel\b",
+        r"\ble visuel\b",
+        r"\bvisuel meteo\b",
+        r"\bregarder.*visuel\b",
+        r"\banalyser.*visuel\b",
     ]
 
     return any(

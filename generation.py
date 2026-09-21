@@ -51,7 +51,7 @@ GEMINI_MODEL = os.getenv(
     "gemini-3.6-flash"
 )
 
-GEMINI_TIMEOUT_MS = 20_000
+GEMINI_TIMEOUT_MS = 30_000
 
 GEMINI_TEMPERATURE = 0.2
 
@@ -1489,6 +1489,51 @@ def appeler_gemini(
                         max_output_tokens=
                             GEMINI_MAX_OUTPUT_TOKENS,
                     )
+            )
+        )
+
+# ============================================================
+# DIAGNOSTIC TEMPORAIRE GEMINI
+# ============================================================
+
+        candidates = getattr(
+            response,
+            "candidates",
+            None
+        )
+
+        candidate = (
+            candidates[0]
+            if candidates
+            else None
+        )
+
+        print(
+            "GEMINI FINISH_REASON =",
+            getattr(
+                candidate,
+                "finish_reason",
+                None
+            )
+        )
+
+        print(
+            "GEMINI USAGE_METADATA =",
+            getattr(
+                response,
+                "usage_metadata",
+                None
+            )
+        )
+
+        print(
+            "GEMINI RESPONSE_TEXT =",
+            repr(
+                getattr(
+                    response,
+                    "text",
+                    None
+                )
             )
         )
 

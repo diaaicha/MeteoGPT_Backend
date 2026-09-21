@@ -85,8 +85,6 @@ data/qdrant/
 data/audio/
 
 # Fichiers de travail locaux
-cmd.txt
-docs/backend_development.md
 
 
 # ------------------------------------------------------------
