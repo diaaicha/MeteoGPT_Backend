@@ -80,7 +80,18 @@ data/embeddings*.json
 data/registry/
 data/raw/
 data/processed/
+data/extracted/
+data/qdrant/
+data/audio/
 
+# Fichiers de travail locaux
+
+
+# ------------------------------------------------------------
+# BACKUPS LOCAUX
+# ------------------------------------------------------------
+
+backups/
 
 # ------------------------------------------------------------
 # UPLOADS / TEMP
