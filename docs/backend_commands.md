@@ -588,6 +588,99 @@ Lorsqu'une phase est entièrement validée :
 | Health | `http://127.0.0.1:8000/health` |
 | OpenAPI | `http://127.0.0.1:8000/openapi.json` |
 
+
+
+
+
+
+## B5 — Logs et observabilité
+
+### Consulter les derniers logs
+
+```powershell
+Get-Content .\logs\meteogpt_backend.log -Tail 20
+```
+
+### Suivre les logs en temps réel
+
+```powershell
+Get-Content .\logs\meteogpt_backend.log -Wait
+```
+
+### Tester l’observabilité
+
+```powershell
+pytest .\backend\tests\test_observability.py -q
+```
+
+### Tester le Chat
+
+```powershell
+pytest .\backend\tests\test_chat.py -q
+```
+
+### Tester tout le backend
+
+```powershell
+pytest .\backend\tests -q
+```
+
+Résultat attendu après B5 :
+
+```text
+22 passed
+```
+
+### Vérifier la compilation des fichiers B5
+
+```powershell
+python -m py_compile `
+    .\generation.py `
+    .\backend\app\main.py `
+    .\backend\app\core\logging.py `
+    .\backend\app\core\log_context.py `
+    .\backend\app\middleware\request_logging.py `
+    .\backend\app\services\chat_service.py
+```
+
+### Tester le `request_id` sans appeler Gemini
+
+```powershell
+python -c "from fastapi.testclient import TestClient; from backend.app.main import app; r=TestClient(app).get('/health'); print('STATUS =', r.status_code); print('REQUEST_ID =', r.headers.get('X-Request-ID'))"
+```
+
+### Vérifier les modifications Git
+
+```powershell
+git status --short
+```
+
+```powershell
+git diff --check
+```
+
+```powershell
+git diff --stat
+```
+
+```powershell
+git diff --name-only
+```
+
+### Vérifier la branche courante
+
+```powershell
+git branch --show-current
+```
+
+Branche attendue pour B5 :
+
+```text
+feature/b5-observability
+```
+
+
+
 ---
 
 # 26. Évolution du document

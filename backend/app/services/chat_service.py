@@ -6,6 +6,15 @@ from backend.app.schemas.chat import (
 )
 
 
+from backend.app.core.log_context import (
+    get_request_id,
+    thread_id_context,
+)
+from backend.app.core.logging import (
+    get_logger,
+)
+
+logger = get_logger("chat")
 # ============================================================
 # CHARGEMENT LAZY DU PIPELINE
 # ============================================================
@@ -112,104 +121,207 @@ def process_chat(
         )
     )
 
-    process_text_request = (
-        _load_process_text_request()
+    thread_token = thread_id_context.set(
+        active_thread_id
     )
 
-    result = process_text_request(
-        query,
-        thread_id=active_thread_id,
-        user_preferences=user_preferences,
-    )
+    try:
 
-    if not isinstance(
-        result,
-        dict
-    ):
-        raise RuntimeError(
-            "Le pipeline MeteoGPT a retourné "
-            "un résultat invalide."
+        process_text_request = (
+            _load_process_text_request()
         )
 
-    latencies = result.get(
-        "latencies_ms",
-        {}
-    )
+        result = process_text_request(
+            query,
+            thread_id=active_thread_id,
+            user_preferences=user_preferences,
+        )
 
-    if not isinstance(
-        latencies,
-        dict
-    ):
-        latencies = {}
+        if not isinstance(
+            result,
+            dict
+        ):
+            raise RuntimeError(
+                "Le pipeline MeteoGPT a retourné "
+                "un résultat invalide."
+            )
 
-    return ChatResponse(
-        success=bool(
+        latencies = result.get(
+            "latencies_ms",
+            {}
+        )
+
+        if not isinstance(
+            latencies,
+            dict
+        ):
+            latencies = {}
+
+        success = bool(
             result.get(
                 "success",
                 False
             )
-        ),
+        )
 
-        thread_id=
+        log_function = (
+            logger.info
+            if success
+            else logger.warning
+        )
+
+        log_function(
+            "Chat request processed | "
+            "request_id=%s | "
+            "thread_id=%s | "
+            "route=%s | "
+            "intent=%s | "
+            "generation_mode=%s | "
+            "retrieval=%s | "
+            "multimodal=%s | "
+            "grounded=%s | "
+            "agent_ms=%.2f | "
+            "retrieval_ms=%.2f | "
+            "generation_ms=%.2f | "
+            "total_ms=%.2f | "
+            "error=%s",
+            get_request_id(),
             active_thread_id,
-
-        answer=
-            result.get(
-                "answer",
-                ""
-            )
-            or "",
-
-        route=
-            result.get(
-                "route"
+            result.get("route"),
+            result.get("intent"),
+            result.get("generation_mode"),
+            bool(
+                result.get(
+                    "retrieval_executed",
+                    False
+                )
             ),
-
-        intent=
-            result.get(
-                "intent"
+            bool(
+                result.get(
+                    "use_multimodal",
+                    False
+                )
             ),
-
-        generation_mode=
-            result.get(
-                "generation_mode"
+            bool(
+                result.get(
+                    "grounded",
+                    False
+                )
             ),
-
-        grounded=bool(
-            result.get(
-                "grounded",
-                False
-            )
-        ),
-
-        retrieval_executed=bool(
-            result.get(
-                "retrieval_executed",
-                False
-            )
-        ),
-
-        use_multimodal=bool(
-            result.get(
-                "use_multimodal",
-                False
-            )
-        ),
-
-        sources=_normalize_sources(
-            result.get(
-                "sources_used",
-                []
-            )
-        ),
-
-        latency_ms=
-            latencies.get(
-                "total"
+            float(
+                latencies.get(
+                    "agent",
+                    0.0
+                )
+                or 0.0
             ),
-
-        error=
+            float(
+                latencies.get(
+                    "retrieval",
+                    0.0
+                )
+                or 0.0
+            ),
+            float(
+                latencies.get(
+                    "generation",
+                    0.0
+                )
+                or 0.0
+            ),
+            float(
+                latencies.get(
+                    "total",
+                    0.0
+                )
+                or 0.0
+            ),
             result.get(
                 "error"
             ),
-    )
+        )
+
+        return ChatResponse(
+            success=success,
+
+            thread_id=
+                active_thread_id,
+
+            answer=
+                result.get(
+                    "answer",
+                    ""
+                )
+                or "",
+
+            route=
+                result.get(
+                    "route"
+                ),
+
+            intent=
+                result.get(
+                    "intent"
+                ),
+
+            generation_mode=
+                result.get(
+                    "generation_mode"
+                ),
+
+            grounded=bool(
+                result.get(
+                    "grounded",
+                    False
+                )
+            ),
+
+            retrieval_executed=bool(
+                result.get(
+                    "retrieval_executed",
+                    False
+                )
+            ),
+
+            use_multimodal=bool(
+                result.get(
+                    "use_multimodal",
+                    False
+                )
+            ),
+
+            sources=_normalize_sources(
+                result.get(
+                    "sources_used",
+                    []
+                )
+            ),
+
+            latency_ms=
+                latencies.get(
+                    "total"
+                ),
+
+            error=
+                result.get(
+                    "error"
+                ),
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Chat request failed | "
+            "request_id=%s | "
+            "thread_id=%s",
+            get_request_id(),
+            active_thread_id,
+        )
+
+        raise
+
+    finally:
+
+        thread_id_context.reset(
+            thread_token
+        )

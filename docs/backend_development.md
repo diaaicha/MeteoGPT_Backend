@@ -1999,3 +1999,174 @@ Les données persistent désormais avec des chemins relatifs au projet, par exem
 data/extracted/api/page_images/...
 data/extracted/api/visuals/...
 data/qdrant
+```
+
+# B5 — Logs, erreurs et observabilité
+
+### Objectif
+
+La phase B5 introduit une observabilité légère dans le backend MeteoGPT afin de faciliter le diagnostic des requêtes, des erreurs et des performances du pipeline RAG, sans ajouter de solution de monitoring externe lourde.
+
+### Logging centralisé
+
+Le backend utilise désormais le module standard `logging` de Python.
+
+La configuration est centralisée dans :
+
+```text
+backend/app/core/logging.py
+```
+
+Les logs sont envoyés :
+
+- dans la console ;
+- dans le fichier `logs/meteogpt_backend.log`.
+
+Le fichier de log utilise une rotation afin d’éviter une croissance non contrôlée.
+
+### Identifiants de traçabilité
+
+Deux identifiants sont utilisés :
+
+- `request_id` : identifie une requête HTTP individuelle ;
+- `thread_id` : identifie une conversation MeteoGPT.
+
+Chaque requête HTTP reçoit automatiquement un UUID exposé dans l’en-tête :
+
+```text
+X-Request-ID
+```
+
+Le `request_id` permet de relier les logs HTTP aux logs générés pendant le traitement Chat.
+
+Le `thread_id` permet quant à lui de suivre une même conversation sur plusieurs requêtes.
+
+### Logs HTTP
+
+Le middleware :
+
+```text
+backend/app/middleware/request_logging.py
+```
+
+journalise les informations suivantes :
+
+- méthode HTTP ;
+- chemin appelé ;
+- statut HTTP ;
+- latence de la requête ;
+- `request_id`.
+
+Les niveaux de logs utilisés sont :
+
+```text
+2xx / 3xx -> INFO
+4xx       -> WARNING
+5xx       -> ERROR
+```
+
+### Logs Chat et RAG
+
+Le service Chat journalise les principales métadonnées techniques du traitement :
+
+- `request_id` ;
+- `thread_id` ;
+- route choisie ;
+- intent identifié ;
+- mode de génération ;
+- exécution ou non du retrieval ;
+- utilisation ou non du multimodal ;
+- statut `grounded` ;
+- latence de l’Agent ;
+- latence du Retrieval ;
+- latence de la Generation ;
+- latence totale ;
+- type d’erreur éventuel.
+
+Les latences déjà calculées par le pipeline RAG sont réutilisées afin d’éviter de dupliquer les mesures.
+
+### Protection des données
+
+Les logs MeteoGPT ne doivent pas contenir :
+
+- `GEMINI_API_KEY` ;
+- `WHATSAPP_ACCESS_TOKEN` ;
+- `WHATSAPP_VERIFY_TOKEN` ;
+- secrets contenus dans `.env` ;
+- contenu audio binaire ;
+- prompt complet envoyé au LLM ;
+- question utilisateur complète ;
+- réponse Gemini complète ;
+- contenu intégral des chunks récupérés.
+
+Les anciens `print()` temporaires utilisés pour le diagnostic de Gemini dans `generation.py` ont été supprimés.
+
+### Gestion des erreurs
+
+Les erreurs continuent d’être gérées au niveau des différents composants existants du backend.
+
+L’observabilité ajoutée en B5 permet désormais de distinguer plus facilement :
+
+- les erreurs HTTP ;
+- les erreurs du service Chat ;
+- les erreurs retournées par le pipeline RAG ;
+- les erreurs ou timeouts provenant de la génération.
+
+Une requête ayant échoué conserve également son `request_id`, ce qui permet de retrouver les événements correspondants dans les logs.
+
+### Tests d’observabilité
+
+Un fichier de tests spécifique a été ajouté :
+
+```text
+backend/tests/test_observability.py
+```
+
+Les tests vérifient notamment :
+
+- la présence de `X-Request-ID` ;
+- la validité UUID du `request_id` ;
+- l’unicité du `request_id` entre deux requêtes ;
+- la présence du `request_id` lors d’une erreur HTTP `422` ;
+- la présence du `request_id` lors d’une erreur HTTP `500`.
+
+### Validation
+
+À la fin de la phase B5, l’ensemble des tests backend est validé :
+
+```text
+22 passed
+```
+
+Le warning Starlette / AnyIO observé pendant les tests provient d’une dépendance externe et reste non bloquant.
+
+### Architecture d’observabilité obtenue
+
+```text
+Utilisateur
+    ↓
+FastAPI
+    ↓
+Middleware HTTP
+    ├── request_id
+    ├── statut HTTP
+    └── latence HTTP
+    ↓
+Chat service
+    ├── request_id
+    ├── thread_id
+    ├── route
+    ├── intent
+    ├── mode de génération
+    └── latences RAG
+    ↓
+Agent
+    ↓
+Retriever / Qdrant
+    ↓
+Generation / Gemini
+    ↓
+Réponse MeteoGPT
+```
+
+Cette solution reste volontairement légère, locale et proportionnée aux besoins du PFE MeteoGPT.
