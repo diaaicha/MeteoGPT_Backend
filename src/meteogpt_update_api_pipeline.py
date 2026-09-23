@@ -1246,7 +1246,8 @@ def inferer_categorie_document_api(
     source_file: str
 ) -> Dict[str, Any]:
     """
-    Infère la catégorie et le type documentaire à partir du nom du fichier.
+    Infère la catégorie et le type documentaire
+    à partir du nom du fichier.
     """
 
     nom = Path(
@@ -1273,6 +1274,26 @@ def inferer_categorie_document_api(
                 "bulletin_meteo_matin"
         }
 
+    if "meteo soir" in nom or "meteo_soir" in nom:
+
+        return {
+            "category":
+                "meteo_soir",
+
+            "document_type":
+                "bulletin_meteo_soir"
+        }
+
+    if "marine nationale" in nom or "marine_nationale" in nom:
+
+        return {
+            "category":
+                "marine_nationale",
+
+            "document_type":
+                "bulletin_marine_nationale"
+        }
+
     if "navigation cotiere" in nom or "navigation_cotiere" in nom:
 
         return {
@@ -1283,7 +1304,11 @@ def inferer_categorie_document_api(
                 "bulletin_navigation_cotiere"
         }
 
-    if "peche artisanale" in nom or "peche_artisanale" in nom or "pêche" in nom:
+    if (
+        "peche artisanale" in nom
+        or "peche_artisanale" in nom
+        or "pêche" in nom
+    ):
 
         return {
             "category":
@@ -1333,11 +1358,8 @@ def inferer_validite_api(
     category: str
 ) -> Dict[str, Any]:
     """
-    Infère les métadonnées temporelles principales à partir du nom
-    et de la catégorie du bulletin.
-
-    Les bulletins de navigation côtière peuvent ne pas avoir de date
-    de fin explicite.
+    Infère les métadonnées temporelles principales
+    à partir du nom et de la catégorie du bulletin.
     """
 
     from datetime import datetime, timedelta
@@ -1364,11 +1386,21 @@ def inferer_validite_api(
         "%Y-%m-%d"
     )
 
-    debut = date_base.replace(
-        hour=12,
-        minute=0,
-        second=0
-    )
+    if category == "meteo_soir":
+
+        debut = date_base.replace(
+            hour=21,
+            minute=0,
+            second=0
+        )
+
+    else:
+
+        debut = date_base.replace(
+            hour=12,
+            minute=0,
+            second=0
+        )
 
     if category == "meteo_72h":
 
@@ -1382,6 +1414,18 @@ def inferer_validite_api(
             hours=24
         )
 
+    elif category == "meteo_soir":
+
+        fin = debut + timedelta(
+            hours=24
+        )
+
+    elif category == "marine_nationale":
+
+        fin = debut + timedelta(
+            hours=24
+        )
+
     elif category == "peche_artisanale":
 
         fin = debut + timedelta(
@@ -1390,8 +1434,8 @@ def inferer_validite_api(
 
     elif category == "navigation_cotiere":
 
-            fin = debut + timedelta(
-                hours=24
+        fin = debut + timedelta(
+            hours=24
         )
 
     else:
@@ -1658,8 +1702,59 @@ def construire_visual_units_api(
 
         if source_file in source_files:
 
-            visual_units_filtrees.append(
+            infos_doc = inferer_categorie_document_api(
+                source_file
+            )
+
+            category = infos_doc[
+                "category"
+            ]
+
+            document_type = infos_doc[
+                "document_type"
+            ]
+
+            infos_temps = inferer_validite_api(
+                source_file,
+                category
+            )
+
+            unit_enrichie = dict(
                 unit
+            )
+
+            unit_enrichie[
+                "source_file"
+            ] = source_file
+
+            unit_enrichie[
+                "category"
+            ] = category
+
+            unit_enrichie[
+                "document_type"
+            ] = document_type
+
+            unit_enrichie[
+                "date_publication"
+            ] = infos_temps.get(
+                "date_publication"
+            )
+
+            unit_enrichie[
+                "date_debut_validite"
+            ] = infos_temps.get(
+                "date_debut_validite"
+            )
+
+            unit_enrichie[
+                "date_fin_validite"
+            ] = infos_temps.get(
+                "date_fin_validite"
+            )
+
+            visual_units_filtrees.append(
+                unit_enrichie
             )
 
     return visual_units_filtrees
