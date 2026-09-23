@@ -363,6 +363,23 @@ def construire_contexte_rag(
             "image_paths": [],
             "context_count": 0,
             "has_context": False,
+
+            "data_status":
+                retrieval_result.get(
+                    "data_status",
+                    "unavailable"
+                ),
+
+            "fallback_used":
+                retrieval_result.get(
+                    "fallback_used",
+                    False
+                ),
+
+            "latest_available_until":
+                retrieval_result.get(
+                    "latest_available_until"
+                ),
         }
 
     blocs = []
@@ -588,6 +605,23 @@ def construire_contexte_rag(
         "has_context":
             bool(
                 sources
+            ),
+
+        "data_status":
+            retrieval_result.get(
+                "data_status",
+                "valid"
+            ),
+
+        "fallback_used":
+            retrieval_result.get(
+                "fallback_used",
+                False
+            ),
+
+        "latest_available_until":
+            retrieval_result.get(
+                "latest_available_until"
             ),
     }
 
@@ -982,6 +1016,19 @@ def construire_prompt_rag(
         ""
     )
 
+    data_status = (
+        contexte_rag.get(
+            "data_status",
+            "valid"
+        )
+    )
+
+    latest_available_until = (
+        contexte_rag.get(
+            "latest_available_until"
+        )
+    )
+
     personnalisation = (
         construire_instruction_personnalisation(
             agent_result
@@ -1083,6 +1130,24 @@ Pour la pêche et la navigation :
 """
     )
 
+
+    if data_status == "stale":
+
+        system_prompt += (
+            "\n\nRÈGLE DE FRAÎCHEUR DES DONNÉES\n"
+            "- Aucun bulletin ANACIM valide n'a été trouvé pour la période demandée.\n"
+            "- Le contexte fourni correspond à la dernière information pertinente "
+            "disponible dans le corpus.\n"
+            "- Ne présente jamais ces informations comme une prévision actuelle "
+            "ou comme étant valide pour la période demandée.\n"
+            "- Commence par informer clairement l'utilisateur qu'aucune donnée "
+            "ANACIM valide n'est disponible pour sa période.\n"
+            "- Indique ensuite la période ou la date de la dernière information "
+            "disponible lorsqu'elle est connue.\n"
+            "- Tu peux résumer cette dernière information, mais en rappelant "
+            "clairement qu'elle est expirée pour la demande actuelle."
+        )
+
     # --------------------------------------------------------
     # Règles multimodales
     # --------------------------------------------------------
@@ -1112,6 +1177,12 @@ QUESTION UTILISATEUR
 
 ADAPTATION DE LA RÉPONSE
 {personnalisation}
+
+STATUT DES DONNÉES
+{data_status}
+
+DERNIÈRE VALIDITÉ DISPONIBLE
+{latest_available_until or "non déterminée"}
 
 CONTEXTE ANACIM
 {context_text}
@@ -2016,9 +2087,10 @@ def generate_response(
 
                 answer=
                     (
-                        "Je n'ai pas trouvé suffisamment "
-                        "d'informations ANACIM pour répondre "
-                        "à cette demande."
+                        "Je n'ai pas de donnée ANACIM disponible pour cette période "
+                        "et cette demande dans ma base actuelle. "
+                        "Vous pouvez me demander le dernier bulletin disponible, "
+                        "essayer une autre date ou préciser une autre localité."
                     ),
 
                 generation_mode=

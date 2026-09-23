@@ -1541,16 +1541,22 @@ def selectionner_chunks_temporels(
 
     if target_date < today:
 
-        return [
+        candidats = [
             chunk
             for chunk
             in chunks
-            if obtenir_date_publication(
-                chunk
+            if chunk_couvre_periode(
+                chunk,
+                target_start,
+                target_end,
             )
-            == target_date
         ]
 
+        return (
+            garder_plus_recents_par_categorie(
+                candidats
+            )
+        )
     # ========================================================
     # D. DATE FUTURE
     # ========================================================
@@ -1651,6 +1657,81 @@ def chunk_geographiquement_admissible(
         )
     )
 
+# ============================================================
+# 12' fallback pour chunks expirés
+# ============================================================
+
+def selectionner_chunks_fallback_expire(
+    chunks,
+    temporalite,
+    now
+):
+    """
+    Retourne les chunks correspondant aux dernières
+    informations ANACIM disponibles avant la période
+    demandée lorsqu'aucun document valide ne la couvre.
+
+    Ces données sont explicitement considérées comme
+    expirées pour la période demandée.
+    """
+
+    if not chunks:
+        return []
+
+    temporalite = (
+        temporalite
+        or {}
+    )
+
+    reference = (
+        temporalite.get(
+            "start"
+        )
+        or now
+    )
+
+    candidats = []
+
+    for chunk in chunks:
+
+        date_fin = (
+            parser_datetime_metadata(
+                lire_champ_chunk(
+                    chunk,
+                    "date_fin_validite"
+                )
+            )
+        )
+
+        if (
+            date_fin is not None
+            and
+            date_fin < reference
+        ):
+
+            candidats.append(
+                (
+                    date_fin,
+                    chunk
+                )
+            )
+
+    if not candidats:
+        return []
+
+    derniere_fin_validite = max(
+        date_fin
+        for date_fin, _
+        in candidats
+    )
+
+    return [
+        chunk
+        for date_fin, chunk
+        in candidats
+        if date_fin
+        == derniere_fin_validite
+    ]
 
 # ============================================================
 # 13. SOUS-CORPUS ADMISSIBLE
@@ -1685,6 +1766,10 @@ def selectionner_chunks_admissibles(
         ]
     )
 
+    # ========================================================
+    # 1. FILTRAGE PAR CATEGORIE
+    # ========================================================
+
     chunks_categorie = [
         chunk
         for chunk
@@ -1696,24 +1781,70 @@ def selectionner_chunks_admissibles(
         in categories_autorisees
     ]
 
+    # ========================================================
+    # 2. FILTRAGE GEOGRAPHIQUE
+    # ========================================================
+
+    chunks_geographiques = [
+        chunk
+        for chunk
+        in chunks_categorie
+        if chunk_geographiquement_admissible(
+            chunk,
+            contraintes["location"]
+        )
+    ]
+
+    # ========================================================
+    # 3. RECHERCHE STRICTE PAR VALIDITE
+    # ========================================================
+
     chunks_temporels = (
         selectionner_chunks_temporels(
-            chunks=chunks_categorie,
+            chunks=chunks_geographiques,
             temporalite=
                 contraintes["temporal"],
             now=now
         )
     )
 
-    chunks_finaux = [
-        chunk
-        for chunk
-        in chunks_temporels
-        if chunk_geographiquement_admissible(
-            chunk,
-            contraintes["location"]
+    fallback_used = False
+    data_status = "valid"
+
+    chunks_finaux = (
+        chunks_temporels
+    )
+
+    # ========================================================
+    # 4. FALLBACK :
+    # DERNIERE DONNEE ANACIM DISPONIBLE
+    # ========================================================
+
+    if not chunks_finaux:
+
+        chunks_finaux = (
+            selectionner_chunks_fallback_expire(
+                chunks=
+                    chunks_geographiques,
+                temporalite=
+                    contraintes["temporal"],
+                now=
+                    now
+            )
         )
-    ]
+
+        if chunks_finaux:
+
+            fallback_used = True
+            data_status = "stale"
+
+        else:
+
+            data_status = "unavailable"
+
+    # ========================================================
+    # 5. IDENTIFIANTS
+    # ========================================================
 
     chunk_ids = [
         chunk.get(
@@ -1726,12 +1857,53 @@ def selectionner_chunks_admissibles(
         )
     ]
 
+    # ========================================================
+    # 6. DERNIERE DATE DISPONIBLE
+    # ========================================================
+
+    latest_available_until = None
+
+    dates_fin = [
+        parser_datetime_metadata(
+            lire_champ_chunk(
+                chunk,
+                "date_fin_validite"
+            )
+        )
+        for chunk
+        in chunks_finaux
+    ]
+
+    dates_fin = [
+        value
+        for value
+        in dates_fin
+        if value is not None
+    ]
+
+    if dates_fin:
+
+        latest_available_until = (
+            max(
+                dates_fin
+            ).isoformat()
+        )
+
     return {
         "query":
             query,
 
         "constraints":
             contraintes,
+
+        "data_status":
+            data_status,
+
+        "fallback_used":
+            fallback_used,
+
+        "latest_available_until":
+            latest_available_until,
 
         "counts": {
             "initial":
@@ -1742,12 +1914,17 @@ def selectionner_chunks_admissibles(
                     chunks_categorie
                 ),
 
+            "after_geography":
+                len(
+                    chunks_geographiques
+                ),
+
             "after_temporal":
                 len(
                     chunks_temporels
                 ),
 
-            "after_geography":
+            "final":
                 len(
                     chunks_finaux
                 ),
@@ -1759,8 +1936,6 @@ def selectionner_chunks_admissibles(
         "chunk_ids":
             chunk_ids,
     }
-
-
 # ============================================================
 # 14. DENSE FILTRÉ
 # ============================================================
@@ -2424,6 +2599,23 @@ def hybrid_metadata_retrieve(
                     "constraints"
                 ],
 
+            "data_status":
+                admissibilite.get(
+                    "data_status",
+                    "unavailable"
+                ),
+
+            "fallback_used":
+                admissibilite.get(
+                    "fallback_used",
+                    False
+                ),
+
+            "latest_available_until":
+                admissibilite.get(
+                    "latest_available_until"
+                ),
+
             "filter_counts":
                 admissibilite[
                     "counts"
@@ -2553,6 +2745,23 @@ def hybrid_metadata_retrieve(
             admissibilite[
                 "constraints"
             ],
+
+        "data_status":
+            admissibilite.get(
+                "data_status",
+                "valid"
+            ),
+
+        "fallback_used":
+            admissibilite.get(
+                "fallback_used",
+                False
+            ),
+
+        "latest_available_until":
+            admissibilite.get(
+                "latest_available_until"
+            ),
 
         "filter_counts":
             admissibilite[
