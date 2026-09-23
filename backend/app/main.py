@@ -16,6 +16,11 @@ from backend.app.api.routes.admin_update import (
     router as admin_update_router,
 )
 
+from backend.app.api.routes.audio import (
+    router as audio_router,
+)
+
+
 def create_app() -> FastAPI:
     """
     Crée et configure l'application FastAPI MeteoGPT.
@@ -47,6 +52,12 @@ def create_app() -> FastAPI:
 
     application.include_router(
         chat_router,
+        prefix=settings.api_v1_prefix,
+    )
+
+
+    application.include_router(
+        audio_router,
         prefix=settings.api_v1_prefix,
     )
 
