@@ -91,6 +91,8 @@ INTENT_NAVIGATION_COTIERE = "navigation_cotiere"
 
 INTENT_PECHE_ARTISANALE = "peche_artisanale"
 
+INTENT_MARINE_NATIONALE = "marine_nationale"
+
 INTENT_HISTORIQUE = "historique"
 
 INTENT_METEO_KNOWLEDGE = "meteo_knowledge"
@@ -111,6 +113,7 @@ AGENT_INTENTS = {
     INTENT_METEO_LOCALE,
     INTENT_METEO_72H,
     INTENT_NAVIGATION_COTIERE,
+    INTENT_MARINE_NATIONALE,
     INTENT_PECHE_ARTISANALE,
     INTENT_HISTORIQUE,
     INTENT_METEO_KNOWLEDGE,
@@ -138,6 +141,9 @@ INTENT_TO_ROUTE = {
         ROUTE_RAG,
 
     INTENT_NAVIGATION_COTIERE:
+        ROUTE_RAG,
+
+    INTENT_MARINE_NATIONALE:
         ROUTE_RAG,
 
     INTENT_PECHE_ARTISANALE:
@@ -825,10 +831,40 @@ def detecter_intention_meteo(
         )
     )
 
-    # Navigation côtière
+
+    # Marine nationale explicite
     if categories == [
-        "navigation_cotiere"
+        "marine_nationale"
     ]:
+
+        return construire_decision_agent(
+            query=query,
+
+            route=
+                ROUTE_RAG,
+
+            intent=
+                INTENT_MARINE_NATIONALE,
+
+            needs_retrieval=True,
+
+            offer_personalization=True,
+
+            confidence=1.0
+        )
+
+    # Navigation côtière
+    if (
+        categories == [
+            "navigation_cotiere"
+        ]
+        or
+        set(categories)
+        == {
+            "navigation_cotiere",
+            "marine_nationale",
+        }
+    ):
 
         return construire_decision_agent(
 
@@ -1059,6 +1095,12 @@ INTENT_PROTOTYPES = {
     INTENT_METEO_72H: [
         "prévisions météorologiques pour les trois prochains jours",
         "météo pour les prochaines 72 heures",
+    ],
+
+    INTENT_MARINE_NATIONALE: [
+        "donne-moi le bulletin marine nationale",
+        "quelle est la météo marine nationale",
+        "prévisions du bulletin marine nationale",
     ],
 
     INTENT_NAVIGATION_COTIERE: [
@@ -1335,6 +1377,7 @@ def classifier_requete_fallback(
             INTENT_METEO_72H,
             INTENT_NAVIGATION_COTIERE,
             INTENT_PECHE_ARTISANALE,
+            INTENT_MARINE_NATIONALE,
         }
     )
 
@@ -2303,6 +2346,7 @@ FOLLOWUP_INHERITABLE_INTENTS = {
     INTENT_NAVIGATION_COTIERE,
     INTENT_PECHE_ARTISANALE,
     INTENT_HISTORIQUE,
+    INTENT_MARINE_NATIONALE,
 }
 
 

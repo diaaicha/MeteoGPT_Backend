@@ -81,11 +81,9 @@ GENERAL_METEO_CATEGORIES = {
 SPECIALIZED_CATEGORIES = {
     "navigation_cotiere",
     "peche_artisanale",
+    "marine_nationale",
 }
-
-CATEGORIES_LOCALITE_STRUCTUREE = {
-    "meteo_matin"
-}
+CATEGORIES_LOCALITE_STRUCTUREE = set()
 
 
 FRENCH_MONTHS = {
@@ -130,11 +128,9 @@ qdrant_client_owned = False
 
 _INITIALIZED = False
 
-
 # ============================================================
 # 3. OUTILS GÉNÉRAUX
-# ============================================================
-
+# ============================================================ 
 def nettoyer_requete(query: str) -> str:
 
     if not isinstance(query, str):
@@ -312,6 +308,7 @@ def _construire_index_bm25():
     global BM25_CORPUS_TOKENS
     global BM25_POSITION_BY_CHUNK_ID
     global LOCALITES_CONNNUES
+    global CATEGORIES_LOCALITE_STRUCTUREE
     global bm25_index
 
     source_chunks = _charger_chunks()
@@ -374,6 +371,7 @@ def _construire_index_bm25():
     # --------------------------------------------------------
 
     LOCALITES_CONNNUES = {}
+    CATEGORIES_LOCALITE_STRUCTUREE = set()
 
     for chunk in BM25_CHUNKS:
 
@@ -391,12 +389,23 @@ def _construire_index_bm25():
             )
         )
 
-        if localite_norm:
+        if not localite_norm:
+            continue
 
-            LOCALITES_CONNNUES[
-                localite_norm
-            ] = localite
+        LOCALITES_CONNNUES[
+            localite_norm
+        ] = localite
 
+        category = lire_champ_chunk(
+            chunk,
+            "category"
+        )
+
+        if category:
+
+            CATEGORIES_LOCALITE_STRUCTUREE.add(
+                category
+            )
 
 # ============================================================
 # 6. MODÈLE E5
@@ -641,17 +650,38 @@ def detecter_categories_requete(query):
         }
 
     # --------------------------------------------------------
+    # MARINE NATIONALE
+    # --------------------------------------------------------
+
+    marine_nationale_patterns = [
+        r"\bmarine nationale\b",
+        r"\bbulletin marine national(?:e)?\b",
+        r"\bmeteo marine nationale\b",
+        r"\bmeteorologie marine nationale\b",
+    ]
+
+    if any(
+        re.search(
+            pattern,
+            query_norm
+        )
+        for pattern
+        in marine_nationale_patterns
+    ):
+        return {
+            "mode": "explicit",
+            "categories": [
+                "marine_nationale"
+            ],
+        }
+
+    # --------------------------------------------------------
     # NAVIGATION CÔTIÈRE
     # --------------------------------------------------------
 
     navigation_patterns = [
         r"\bnavigation cotiere\b",
         r"\bnavigation\b",
-        r"\bhoule\b",
-        r"\bau large\b",
-        r"\betat de la mer\b",
-        r"\bmaritime\b",
-        r"\bmer\b",
     ]
 
     if any(
@@ -662,6 +692,30 @@ def detecter_categories_requete(query):
             "mode": "explicit",
             "categories": [
                 "navigation_cotiere"
+            ],
+        }
+
+    # --------------------------------------------------------
+    # MÉTÉO MARITIME GÉNÉRALE
+    # --------------------------------------------------------
+
+    maritime_patterns = [
+        r"\bhoule\b",
+        r"\bau large\b",
+        r"\betat de la mer\b",
+        r"\bmaritime\b",
+        r"\ben mer\b",
+    ]
+
+    if any(
+        re.search(pattern, query_norm)
+        for pattern in maritime_patterns
+    ):
+        return {
+            "mode": "explicit",
+            "categories": [
+                "navigation_cotiere",
+                "marine_nationale",
             ],
         }
 
@@ -742,7 +796,6 @@ def detecter_categories_requete(query):
             "meteo_72h",
         ],
     }
-
 
 # ============================================================
 # 9. DÉTECTION DE LA LOCALITÉ
