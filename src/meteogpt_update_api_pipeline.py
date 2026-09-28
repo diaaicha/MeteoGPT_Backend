@@ -4754,6 +4754,28 @@ def update_api_pipeline(
 
             return result
 
+
+        # ----------------------------------------------------
+        # Documents existants à remplacer dans Qdrant
+        # ----------------------------------------------------
+        # Cette liste doit être construite avant le téléchargement,
+        # car telecharger_bulletins_api() fait ensuite évoluer
+        # update_status vers "downloaded".
+
+        source_files_to_replace = [
+            nom_pdf_depuis_url(
+                bulletin.get("chemin", "")
+            )
+            for bulletin in bulletins_a_traiter
+            if (
+                bulletin.get("chemin")
+                and bulletin.get("update_status")
+                in {
+                    "modified",
+                    "resume_processing",
+                }
+            )
+        ]
         # ----------------------------------------------------
         # 3. Téléchargement
         # ----------------------------------------------------
@@ -4962,20 +4984,6 @@ def update_api_pipeline(
             all_embeddings
         )
 
-        source_files_to_replace = [
-            nom_pdf_depuis_url(
-                bulletin.get("chemin", "")
-            )
-            for bulletin in bulletins_a_traiter
-            if (
-                bulletin.get("chemin")
-                and bulletin.get("update_status")
-                in {
-                    "modified",
-                    "resume_processing",
-                }
-            )
-        ]
 
 
         # ----------------------------------------------------

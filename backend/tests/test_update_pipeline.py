@@ -268,3 +268,193 @@ def test_resume_processing_reuses_existing_pdf(
         bulletin["pdf_downloaded_network"]
         is False
     )
+
+def test_update_pipeline_preserves_modified_source_for_qdrant(
+    tmp_path,
+    monkeypatch,
+):
+    from src import (
+        meteogpt_update_api_pipeline as pipeline,
+    )
+
+    filename = "Bulletin_Test_21-09-2026.pdf"
+
+    bulletin = {
+        "chemin": (
+            "http://example.com/"
+            + filename
+        ),
+        "date_modification":
+            "2026-09-21",
+        "update_status":
+            "modified",
+    }
+
+    fake_pdf = (
+        tmp_path /
+        "data" /
+        "raw" /
+        "api" /
+        "pdf" /
+        filename
+    )
+
+    fake_pdf.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    fake_pdf.write_bytes(
+        b"%PDF-1.4 test"
+    )
+
+    captured = {}
+
+    monkeypatch.setattr(
+        pipeline,
+        "interroger_api_anacim",
+        lambda config: [
+            dict(bulletin)
+        ],
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "detecter_bulletins_a_traiter",
+        lambda bulletins_api, config: [
+            dict(bulletin)
+        ],
+    )
+
+    def fake_download(
+        bulletins_a_traiter,
+        config,
+    ):
+        # Reproduit exactement le comportement réel :
+        # le statut initial "modified" devient "downloaded".
+        for item in bulletins_a_traiter:
+            item["update_status"] = "downloaded"
+            item["source_file"] = filename
+            item["local_pdf_path"] = str(
+                fake_pdf
+            )
+            item["pdf_reused"] = False
+            item[
+                "pdf_downloaded_network"
+            ] = True
+
+        return [
+            fake_pdf
+        ]
+
+    monkeypatch.setattr(
+        pipeline,
+        "telecharger_bulletins_api",
+        fake_download,
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "construire_text_units_api",
+        lambda *args, **kwargs: [
+            {
+                "source_file": filename
+            }
+        ],
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "construire_visual_units_api",
+        lambda *args, **kwargs: [],
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "construire_page_image_units_api",
+        lambda *args, **kwargs: [],
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "construire_document_units_api",
+        lambda *args, **kwargs: [
+            {
+                "source_file": filename
+            }
+        ],
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "construire_chunks_api",
+        lambda *args, **kwargs: [
+            {
+                "chunk_id": "TEST_CHUNK_001",
+                "source_file": filename,
+            }
+        ],
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "construire_embeddings_api",
+        lambda *args, **kwargs: [
+            {
+                "chunk_id": "TEST_CHUNK_001",
+                "embedding": [0.1] * VECTOR_SIZE,
+            }
+        ],
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "update_global_json_file",
+        lambda path, new_items, possible_keys:
+            list(new_items),
+    )
+
+    def fake_indexer(
+        chunks,
+        embeddings,
+        config,
+        qdrant_client=None,
+        source_files_to_replace=None,
+    ):
+        captured[
+            "source_files_to_replace"
+        ] = source_files_to_replace
+
+        return {
+            "status": "success",
+            "source_files_replaced":
+                source_files_to_replace or [],
+        }
+
+    monkeypatch.setattr(
+        pipeline,
+        "indexer_qdrant_api",
+        fake_indexer,
+    )
+
+    monkeypatch.setattr(
+        pipeline,
+        "mettre_a_jour_registre_api",
+        lambda *args, **kwargs: None,
+    )
+
+    result = pipeline.update_api_pipeline(
+        root_dir=str(tmp_path),
+        dry_run=False,
+    )
+
+    assert result["status"] == "success"
+
+    assert (
+        captured[
+            "source_files_to_replace"
+        ]
+        == [
+            filename
+        ]
+    )
