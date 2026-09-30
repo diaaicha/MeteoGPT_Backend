@@ -2483,3 +2483,2084 @@ Endpoint admin                  : validé
 Idempotence                     : validée
 Tests backend                   : 31 passed
 ```
+
+
+---
+
+# 28. B7 — Intégration audio
+
+## Objectif
+
+La phase B7 a pour objectif d'intégrer au backend FastAPI les capacités de traitement audio déjà développées dans les composants du projet.
+
+L'objectif principal est de permettre au backend de recevoir un fichier audio, d'en extraire la parole, de transmettre le texte obtenu au pipeline conversationnel existant puis de retourner une réponse structurée.
+
+Cette phase ne crée pas un second pipeline conversationnel dédié à l'audio. Elle réutilise le même cœur applicatif que les requêtes textuelles.
+
+Le principe retenu est :
+
+```text
+Audio utilisateur
+      |
+      v
+Transcription
+      |
+      v
+Texte
+      |
+      v
+Pipeline conversationnel
+      |
+      v
+Réponse
+```
+
+Cette séparation permet également de préparer l'intégration future des messages vocaux reçus depuis WhatsApp.
+
+---
+
+## Architecture retenue
+
+La couche audio repose sur plusieurs niveaux :
+
+```text
+Client
+  |
+  v
+FastAPI
+  |
+  v
+Route audio
+  |
+  v
+audio_service.py
+  |
+  v
+speech.py
+  |
+  v
+Pipeline conversationnel
+  |
+  v
+Agent / Retriever / Generation
+```
+
+La couche HTTP reste séparée de la logique Speech et de la logique conversationnelle.
+
+Cette organisation évite de placer directement le traitement audio dans les routes FastAPI.
+
+---
+
+## Endpoint audio
+
+L'API expose une route dédiée au traitement audio :
+
+```text
+POST /api/v1/audio/chat
+```
+
+Cette route permet notamment de transmettre :
+
+- un fichier audio ;
+- un `thread_id` optionnel ;
+- les paramètres nécessaires au traitement conversationnel.
+
+Le fichier est transmis au service audio, qui centralise le traitement applicatif.
+
+---
+
+## Service audio
+
+La logique principale de B7 est centralisée dans :
+
+```text
+backend/app/services/audio_service.py
+```
+
+Le service expose notamment la fonction :
+
+```python
+process_audio_chat(...)
+```
+
+Son rôle est d'orchestrer les différentes étapes nécessaires au traitement d'une requête vocale.
+
+Le flux logique est :
+
+```text
+Fichier audio
+      |
+      v
+Validation
+      |
+      v
+Speech-to-Text
+      |
+      v
+Transcription
+      |
+      v
+Pipeline conversationnel
+      |
+      v
+Réponse
+```
+
+Le service agit donc comme adaptateur entre la couche HTTP et les composants audio déjà présents dans le projet.
+
+---
+
+## Réutilisation de la couche Speech
+
+Le backend réutilise le module :
+
+```text
+speech.py
+```
+
+qui contient les fonctions liées au traitement de la parole.
+
+La phase B7 ne reconstruit donc pas les mécanismes Speech expérimentés précédemment.
+
+Elle les intègre dans l'architecture applicative du backend.
+
+Le principe retenu est :
+
+```text
+speech.py
+    |
+    v
+fonctions Speech
+    |
+    v
+audio_service.py
+    |
+    v
+FastAPI
+```
+
+---
+
+## Transcription audio
+
+Lorsqu'un fichier audio est reçu, la première étape consiste à convertir la parole en texte.
+
+La transcription obtenue devient ensuite l'entrée du pipeline conversationnel.
+
+Le pipeline travaille donc toujours à partir d'une requête textuelle normalisée :
+
+```text
+Audio
+  |
+  v
+Speech-to-Text
+  |
+  v
+Texte utilisateur
+  |
+  v
+Agent
+```
+
+Cette approche permet d'éviter de dupliquer la logique de routage et de compréhension déjà implémentée pour les messages texte.
+
+---
+
+## Réutilisation du pipeline conversationnel
+
+Une fois la transcription obtenue, la requête rejoint le pipeline conversationnel existant.
+
+Selon l'intention identifiée par l'Agent, le traitement peut emprunter différentes routes :
+
+```text
+Transcription
+      |
+      v
+Agent
+      |
+      +--> réponse statique
+      |
+      +--> clarification
+      |
+      +--> direct LLM
+      |
+      +--> RAG
+```
+
+Lorsque le Retriever est nécessaire :
+
+```text
+Transcription
+      |
+      v
+Agent
+      |
+      v
+Retriever hybride
+      |
+      v
+Qdrant
+      |
+      v
+Generation
+      |
+      v
+Réponse
+```
+
+Ainsi, les mécanismes RAG ne dépendent pas de l'origine textuelle ou audio de la requête.
+
+---
+
+## Gestion du thread conversationnel
+
+Le traitement audio accepte également un :
+
+```text
+thread_id
+```
+
+Cet identifiant permet de conserver la continuité d'une conversation.
+
+Lorsque le `thread_id` est fourni, il est transmis au pipeline conversationnel.
+
+Cette logique est importante pour l'intégration WhatsApp prévue en B8, car le numéro WhatsApp de l'utilisateur pourra être utilisé comme identifiant stable de conversation.
+
+Le principe est :
+
+```text
+Utilisateur
+    |
+    v
+thread_id
+    |
+    v
+Contexte conversationnel
+```
+
+---
+
+## Mode de sortie
+
+Le service audio permet de dissocier le traitement de l'entrée audio du format de sortie.
+
+Le traitement peut notamment produire une réponse textuelle utilisée par les autres couches du backend.
+
+Cette séparation est particulièrement utile pour WhatsApp :
+
+```text
+Message vocal WhatsApp
+        |
+        v
+Audio
+        |
+        v
+Transcription
+        |
+        v
+Pipeline conversationnel
+        |
+        v
+Réponse texte
+        |
+        v
+WhatsApp
+```
+
+La génération éventuelle d'une réponse audio reste ainsi indépendante de la réception du fichier audio.
+
+---
+
+## Configuration
+
+L'activation de la couche Speech reste contrôlée par le feature flag :
+
+```text
+ENABLE_SPEECH
+```
+
+Cette variable permet d'activer ou de désactiver la fonctionnalité sans modifier le code.
+
+Le principe reste cohérent avec les autres fonctionnalités optionnelles du backend :
+
+```text
+.env
+  |
+  v
+Settings
+  |
+  v
+ENABLE_SPEECH
+  |
+  v
+Couche audio
+```
+
+---
+
+## Gestion des fichiers temporaires
+
+Les fichiers audio reçus par le backend sont considérés comme des données temporaires.
+
+Ils ne doivent pas être versionnés dans Git.
+
+Les extensions audio sont déjà exclues par le `.gitignore`, notamment :
+
+```text
+*.wav
+*.mp3
+*.ogg
+*.m4a
+```
+
+Cette règle permet d'éviter l'ajout accidentel de données audio utilisateur dans le dépôt.
+
+---
+
+## Validation fonctionnelle
+
+La couche audio a été validée indépendamment de WhatsApp.
+
+Les validations réalisées couvrent notamment :
+
+```text
+Route FastAPI audio        : validée
+Réception fichier audio    : validée
+Service audio              : validé
+Transcription              : validée
+Transmission thread_id     : validée
+Pipeline conversationnel   : validé
+Réponse structurée         : validée
+Tests automatisés          : validés
+```
+
+Un test réel de transcription en français a également permis de confirmer le fonctionnement du traitement Speech.
+
+---
+
+## Rôle de B7 dans l'architecture globale
+
+B7 introduit une couche réutilisable par plusieurs interfaces.
+
+L'architecture devient :
+
+```text
+                 +----------------+
+                 | Requête texte  |
+                 +-------+--------+
+                         |
+                         v
+                 Pipeline conversationnel
+                         ^
+                         |
+                 +-------+--------+
+                 | Service audio  |
+                 +-------+--------+
+                         ^
+                         |
+                 +-------+--------+
+                 | Fichier audio  |
+                 +----------------+
+```
+
+La couche audio est donc indépendante du canal de communication.
+
+Cette décision permet à B8 de réutiliser B7 pour les messages vocaux WhatsApp sans recréer les mécanismes Speech.
+
+---
+
+## État final B7
+
+```text
+Endpoint audio              : validé
+Service audio               : validé
+Speech-to-Text              : validé
+Réutilisation pipeline      : validée
+Gestion thread_id           : validée
+Séparation des couches      : validée
+Tests automatisés           : validés
+Test audio réel             : validé
+```
+
+La phase B7 fournit désormais au backend une couche audio exploitable par les futures interfaces.
+
+**Statut : VALIDÉ**
+
+---
+
+# 29. B8 — Intégration WhatsApp Cloud API
+
+## Objectif
+
+La phase B8 vise à connecter le backend à WhatsApp à travers l'API officielle WhatsApp Cloud API de Meta.
+
+L'objectif est de permettre à un utilisateur d'envoyer un message depuis WhatsApp, de transmettre ce message au pipeline conversationnel existant puis de recevoir directement la réponse dans la conversation WhatsApp.
+
+WhatsApp constitue donc une nouvelle interface autour des services déjà développés.
+
+Le principe général est :
+
+```text
+Utilisateur WhatsApp
+        |
+        v
+WhatsApp Cloud API
+        |
+        v
+Webhook Meta
+        |
+        v
+FastAPI
+        |
+        v
+Pipeline conversationnel
+        |
+        v
+WhatsApp Cloud API
+        |
+        v
+Utilisateur
+```
+
+La première partie de B8 concerne les messages texte.
+
+La gestion des messages vocaux sera ajoutée dans la suite de la même phase.
+
+---
+
+## Branche de développement
+
+La phase est développée dans :
+
+```text
+feature/b8-whatsapp
+```
+
+Les modifications restent isolées de `develop` jusqu'à validation complète de B8.
+
+---
+
+## Choix de WhatsApp Cloud API
+
+L'intégration utilise directement :
+
+```text
+WhatsApp Cloud API
+```
+
+fournie par Meta.
+
+Aucun intermédiaire tel que Twilio n'est utilisé dans cette intégration.
+
+L'architecture retenue devient donc :
+
+```text
+Backend
+   |
+   v
+Meta Graph API
+   |
+   v
+WhatsApp
+```
+
+Cette approche permet au backend de communiquer directement avec l'infrastructure WhatsApp de Meta.
+
+---
+
+## Composants ajoutés
+
+La phase B8 introduit principalement les fichiers suivants :
+
+```text
+backend/app/api/routes/whatsapp.py
+backend/app/schemas/whatsapp.py
+backend/app/services/whatsapp_service.py
+backend/tests/test_whatsapp.py
+```
+
+Le router WhatsApp est également enregistré dans :
+
+```text
+backend/app/main.py
+```
+
+La configuration existante est réutilisée depuis :
+
+```text
+backend/app/core/config.py
+```
+
+---
+
+## Architecture B8
+
+L'organisation fonctionnelle est :
+
+```text
+Meta
+ |
+ v
+whatsapp.py
+(route FastAPI)
+ |
+ v
+whatsapp_service.py
+ |
+ +--> extraction du message
+ |
+ +--> process_chat()
+ |
+ +--> envoi Graph API
+ |
+ v
+Utilisateur WhatsApp
+```
+
+Les responsabilités sont ainsi séparées :
+
+```text
+Route
+    -> protocole HTTP / webhook
+
+Schémas
+    -> représentation des données normalisées
+
+Service WhatsApp
+    -> parsing, orchestration et appels Meta
+
+Chat service
+    -> traitement conversationnel
+
+Pipeline RAG
+    -> intelligence métier
+```
+
+---
+
+## Configuration WhatsApp
+
+Les paramètres nécessaires sont chargés depuis la configuration centralisée.
+
+Les variables utilisées sont :
+
+```env
+WHATSAPP_ACCESS_TOKEN=
+WHATSAPP_PHONE_NUMBER_ID=
+WHATSAPP_VERIFY_TOKEN=
+WHATSAPP_API_VERSION=
+ENABLE_WHATSAPP=
+```
+
+Les valeurs réelles sont placées uniquement dans :
+
+```text
+.env
+```
+
+Elles ne doivent jamais être versionnées.
+
+Le fichier :
+
+```text
+.env.example
+```
+
+conserve uniquement les noms des variables et des valeurs non sensibles.
+
+---
+
+## Feature flag WhatsApp
+
+L'activation de l'intégration dépend de :
+
+```text
+ENABLE_WHATSAPP
+```
+
+Lorsque la fonctionnalité est désactivée, les routes WhatsApp ne doivent pas lancer le traitement normal.
+
+Cette approche permet de conserver la même stratégie que pour les autres composants optionnels du backend.
+
+---
+
+## Isolation des tests de configuration
+
+L'environnement local utilise désormais WhatsApp activé pour les tests réels.
+
+Cela a révélé qu'un test utilisant directement :
+
+```python
+Settings()
+```
+
+pouvait récupérer les valeurs du fichier `.env` local.
+
+Les tests des valeurs par défaut ont donc été isolés avec :
+
+```python
+Settings(
+    _env_file=None,
+)
+```
+
+Ainsi :
+
+```text
+Configuration réelle locale
+        |
+        X
+        |
+Tests des valeurs par défaut
+```
+
+Cette modification permet de garantir que les tests de configuration ne dépendent pas de l'environnement de la machine de développement.
+
+---
+
+## Vérification du webhook
+
+Meta utilise une requête HTTP GET pour vérifier l'URL déclarée comme webhook.
+
+La route exposée est :
+
+```text
+GET /api/v1/whatsapp/webhook
+```
+
+Meta transmet notamment :
+
+```text
+hub.mode
+hub.verify_token
+hub.challenge
+```
+
+Le backend vérifie :
+
+```text
+hub.mode == "subscribe"
+```
+
+ainsi que la correspondance entre :
+
+```text
+hub.verify_token
+```
+
+et :
+
+```text
+WHATSAPP_VERIFY_TOKEN
+```
+
+Lorsque la vérification réussit, le backend retourne :
+
+```text
+hub.challenge
+```
+
+avec :
+
+```text
+HTTP 200
+```
+
+Lorsque le token est invalide, la requête est refusée.
+
+---
+
+## Rôle du verify token
+
+Le :
+
+```text
+WHATSAPP_VERIFY_TOKEN
+```
+
+est un secret défini par l'application.
+
+Il permet à Meta et au backend de vérifier qu'ils utilisent la même configuration lors de l'enregistrement du webhook.
+
+Il ne correspond pas :
+
+```text
+au numéro WhatsApp
+au Phone Number ID
+au WhatsApp Business Account ID
+à l'Access Token Meta
+```
+
+Sa valeur réelle reste exclusivement dans `.env`.
+
+---
+
+## Réception des événements Meta
+
+Les événements WhatsApp sont reçus par :
+
+```text
+POST /api/v1/whatsapp/webhook
+```
+
+La route :
+
+```text
+backend/app/api/routes/whatsapp.py
+```
+
+lit le payload JSON envoyé par Meta puis transmet son contenu au service WhatsApp.
+
+Le webhook peut recevoir plusieurs types d'événements.
+
+Par exemple :
+
+```text
+messages utilisateur
+statuts de messages
+notifications Meta
+```
+
+À ce stade de B8, seuls les messages texte utilisateur sont transmis au pipeline conversationnel.
+
+Les autres événements sont acceptés sans déclencher de traitement texte.
+
+---
+
+## Schéma normalisé du message texte
+
+Un schéma dédié a été créé :
+
+```python
+WhatsAppTextMessage
+```
+
+Il contient :
+
+```text
+sender
+message_id
+text
+```
+
+Le champ :
+
+```text
+sender
+```
+
+correspond au numéro WhatsApp de l'utilisateur.
+
+Le champ :
+
+```text
+message_id
+```
+
+correspond à l'identifiant du message fourni par Meta.
+
+Le champ :
+
+```text
+text
+```
+
+contient le corps du message utilisateur.
+
+---
+
+## Extraction des messages
+
+La fonction :
+
+```python
+extract_text_messages(...)
+```
+
+analyse la structure du payload Meta.
+
+Le parcours suit principalement :
+
+```text
+entry
+  |
+  v
+changes
+  |
+  v
+value
+  |
+  v
+messages
+```
+
+Pour chaque message, le service vérifie notamment :
+
+```text
+message valide
+type == text
+sender présent
+message_id présent
+text.body présent
+```
+
+Lorsqu'une information obligatoire manque, le message est ignoré.
+
+Cette approche permet d'éviter qu'un événement Meta incomplet ne provoque une erreur dans le pipeline conversationnel.
+
+---
+
+## Réponse immédiate au webhook
+
+Meta attend une réponse HTTP rapide après l'envoi d'un webhook.
+
+Le traitement conversationnel pouvant nécessiter :
+
+```text
+Agent
+Retriever
+Qdrant
+Gemini
+```
+
+il ne doit pas bloquer inutilement la réponse HTTP adressée à Meta.
+
+FastAPI utilise donc :
+
+```python
+BackgroundTasks
+```
+
+Le principe est :
+
+```text
+POST webhook
+     |
+     v
+Validation JSON
+     |
+     v
+Extraction message
+     |
+     +--------------------+
+     |                    |
+     v                    v
+HTTP 200           BackgroundTasks
+                          |
+                          v
+                 Traitement conversationnel
+```
+
+Cette organisation réduit le risque que Meta considère le webhook comme non disponible pendant une requête RAG plus longue.
+
+---
+
+## Traitement d'un message texte WhatsApp
+
+La fonction :
+
+```python
+process_whatsapp_text_message(...)
+```
+
+reçoit un :
+
+```python
+WhatsAppTextMessage
+```
+
+puis appelle le service Chat existant.
+
+Le principe est :
+
+```python
+process_chat(
+    query=message.text,
+    thread_id=message.sender,
+)
+```
+
+WhatsApp ne possède donc pas son propre Agent ou son propre Retriever.
+
+Il utilise directement les composants déjà intégrés au backend.
+
+---
+
+## Utilisation du numéro utilisateur comme thread_id
+
+Le numéro WhatsApp de l'expéditeur est utilisé comme :
+
+```text
+thread_id
+```
+
+Le mécanisme devient :
+
+```text
+Numéro utilisateur
+        |
+        v
+sender
+        |
+        v
+thread_id
+        |
+        v
+Conversation backend
+```
+
+Ce choix permet de disposer d'un identifiant stable entre plusieurs messages envoyés par le même utilisateur.
+
+Il évite également de générer un nouveau `thread_id` pour chaque message WhatsApp.
+
+---
+
+## Flux conversationnel texte
+
+Le flux applicatif complet pour un message texte est :
+
+```text
+Utilisateur
+    |
+    v
+Message WhatsApp
+    |
+    v
+Meta
+    |
+    v
+POST /api/v1/whatsapp/webhook
+    |
+    v
+extract_text_messages()
+    |
+    v
+WhatsAppTextMessage
+    |
+    v
+BackgroundTasks
+    |
+    v
+process_whatsapp_text_message()
+    |
+    v
+process_chat()
+    |
+    v
+Agent
+```
+
+Selon l'intention détectée :
+
+```text
+Agent
+ |
+ +--> static
+ |
+ +--> clarify
+ |
+ +--> direct_llm
+ |
+ +--> rag
+```
+
+---
+
+## Envoi d'un message vers WhatsApp
+
+Le service expose la fonction :
+
+```python
+send_whatsapp_text_message(...)
+```
+
+Elle permet d'envoyer une réponse depuis le backend vers WhatsApp Cloud API.
+
+L'appel utilise :
+
+```text
+https://graph.facebook.com/
+```
+
+avec :
+
+```text
+WHATSAPP_API_VERSION
+```
+
+et :
+
+```text
+WHATSAPP_PHONE_NUMBER_ID
+```
+
+pour construire l'endpoint correspondant au numéro WhatsApp Meta.
+
+---
+
+## Authentification Graph API
+
+L'appel HTTP utilise :
+
+```text
+Authorization: Bearer <WHATSAPP_ACCESS_TOKEN>
+```
+
+Le token provient exclusivement de la configuration locale.
+
+Il n'est jamais écrit directement dans le code source.
+
+Le header JSON utilisé est :
+
+```text
+Content-Type: application/json
+```
+
+---
+
+## Payload d'envoi texte
+
+Le payload utilisé pour un message texte suit la structure :
+
+```json
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": "<destinataire>",
+  "type": "text",
+  "text": {
+    "preview_url": false,
+    "body": "<réponse>"
+  }
+}
+```
+
+Le champ :
+
+```text
+to
+```
+
+correspond au numéro WhatsApp de l'utilisateur.
+
+Le champ :
+
+```text
+body
+```
+
+contient la réponse conversationnelle produite par le backend.
+
+---
+
+## Réutilisation de ChatResponse
+
+Après l'appel :
+
+```python
+chat_response = process_chat(...)
+```
+
+le service vérifie que le traitement est réussi et qu'une réponse est disponible.
+
+Lorsque :
+
+```text
+chat_response.success = true
+```
+
+et que :
+
+```text
+chat_response.answer
+```
+
+est renseigné, la réponse est envoyée à WhatsApp.
+
+Le flux devient :
+
+```text
+process_chat()
+      |
+      v
+ChatResponse.answer
+      |
+      v
+send_whatsapp_text_message()
+      |
+      v
+Meta Graph API
+      |
+      v
+Utilisateur
+```
+
+---
+
+## Client HTTP
+
+Les appels à Graph API utilisent :
+
+```text
+httpx
+```
+
+déjà présent dans les dépendances du backend.
+
+La fonction d'envoi peut :
+
+```text
+créer son propre client HTTP
+```
+
+ou :
+
+```text
+recevoir un client injecté
+```
+
+Cette seconde possibilité facilite les tests automatisés sans appel réel à Meta.
+
+---
+
+## Tests automatisés de B8
+
+Les tests de l'intégration WhatsApp sont regroupés dans :
+
+```text
+backend/tests/test_whatsapp.py
+```
+
+Ils couvrent actuellement :
+
+```text
+1. vérification correcte du webhook Meta
+
+2. rejet d'un verify token incorrect
+
+3. comportement lorsque WhatsApp est désactivé
+
+4. extraction d'un message texte depuis un payload Meta
+
+5. réception d'un webhook contenant un message texte
+
+6. réception d'un événement sans message texte
+
+7. utilisation du numéro utilisateur comme thread_id
+
+8. planification du traitement dans BackgroundTasks
+
+9. envoi d'un message texte via Graph API avec HTTP mocké
+```
+
+Le résultat ciblé obtenu est :
+
+```text
+9 passed
+```
+
+---
+
+## Mock de Graph API
+
+L'envoi HTTP est testé avec :
+
+```python
+httpx.MockTransport
+```
+
+Le test vérifie notamment :
+
+```text
+URL Graph API
+Authorization Bearer
+messaging_product
+destinataire
+type du message
+contenu text.body
+réponse Meta simulée
+```
+
+Cette approche évite :
+
+```text
+d'utiliser le vrai Access Token
+d'envoyer un message réel
+de dépendre du réseau
+de consommer inutilement des appels Meta
+```
+
+pendant les tests automatisés.
+
+---
+
+## Validation de la suite backend
+
+Après l'ajout des tests WhatsApp, la suite complète du backend a été exécutée.
+
+Résultat :
+
+```text
+51 passed
+```
+
+Un warning lié à Starlette / AnyIO reste présent.
+
+Il provient d'une dépendance externe utilisée par `TestClient` et ne bloque pas le fonctionnement du backend.
+
+---
+
+## Mise en place du numéro de test Meta
+
+L'intégration a d'abord été configurée avec le numéro de test fourni dans l'environnement développeur Meta.
+
+Les éléments nécessaires sont notamment :
+
+```text
+Temporary Access Token
+Phone Number ID
+WhatsApp Business Account
+numéro destinataire autorisé
+```
+
+Le numéro personnel utilisé pour les essais doit être enregistré parmi les destinataires autorisés de l'environnement de test.
+
+---
+
+## Première erreur de destinataire
+
+Lors d'un premier essai d'envoi, le numéro de test Meta avait été utilisé comme destinataire.
+
+Graph API a retourné une erreur indiquant que le numéro destinataire n'était pas présent dans la liste autorisée.
+
+Le problème ne provenait pas de la fonction d'envoi.
+
+Le destinataire devait être le numéro utilisateur autorisé pour les tests.
+
+Après correction, l'envoi réel a fonctionné.
+
+---
+
+## Validation réelle de l'envoi
+
+Un message texte a été envoyé depuis le backend vers le numéro WhatsApp utilisateur autorisé.
+
+Meta a retourné une réponse contenant un identifiant :
+
+```text
+wamid...
+```
+
+Le message a ensuite été reçu sur le téléphone.
+
+Cette validation confirme le flux :
+
+```text
+Backend
+   |
+   v
+Graph API
+   |
+   v
+WhatsApp Cloud API
+   |
+   v
+Téléphone utilisateur
+```
+
+La partie sortante de l'intégration est donc fonctionnelle.
+
+---
+
+## Exposition publique du backend local
+
+Le backend étant exécuté sur :
+
+```text
+127.0.0.1:8000
+```
+
+Meta ne peut pas directement accéder à cette adresse locale.
+
+Un tunnel HTTPS est donc nécessaire pendant le développement.
+
+L'outil retenu est :
+
+```text
+cloudflared
+```
+
+---
+
+## Installation de Cloudflare Tunnel
+
+L'outil :
+
+```text
+cloudflared
+```
+
+a été installé sur la machine de développement.
+
+Le tunnel est lancé avec :
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8000
+```
+
+Cloudflare génère alors une URL publique temporaire :
+
+```text
+https://<identifiant>.trycloudflare.com
+```
+
+---
+
+## Callback URL Meta
+
+La Callback URL utilisée prend la forme :
+
+```text
+https://<tunnel>.trycloudflare.com/api/v1/whatsapp/webhook
+```
+
+Cette URL est enregistrée dans la configuration webhook de l'application Meta.
+
+Le verify token configuré dans Meta doit correspondre à :
+
+```text
+WHATSAPP_VERIFY_TOKEN
+```
+
+du backend.
+
+---
+
+## Particularité du Quick Tunnel
+
+Le Quick Tunnel utilisé pendant le développement est temporaire.
+
+Lorsqu'il est arrêté puis relancé :
+
+```text
+ancienne URL
+    |
+    X
+    |
+nouvelle URL
+```
+
+Une nouvelle adresse `trycloudflare.com` est généralement générée.
+
+La Callback URL Meta doit donc être mise à jour lorsqu'une nouvelle URL est utilisée.
+
+Cette solution est suffisante pour les tests locaux mais n'est pas destinée à la production.
+
+---
+
+## Démarrage du backend pour les essais WhatsApp
+
+Le serveur est lancé avec :
+
+```powershell
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+Le mode `--reload` n'est pas nécessaire pendant les essais impliquant Qdrant local.
+
+Cette précaution évite de créer plusieurs processus pouvant tenter d'ouvrir simultanément le même stockage Qdrant.
+
+---
+
+## Validation publique du GET webhook
+
+Après exposition avec Cloudflare, Meta a pu accéder à :
+
+```text
+GET /api/v1/whatsapp/webhook
+```
+
+Le challenge a été retourné correctement.
+
+Le flux suivant a donc été validé :
+
+```text
+Meta
+ |
+ v
+Internet
+ |
+ v
+Cloudflare HTTPS
+ |
+ v
+localhost
+ |
+ v
+FastAPI
+ |
+ v
+verify token
+ |
+ v
+challenge
+```
+
+---
+
+## Validation publique du POST webhook
+
+Un POST vers l'URL publique a également été testé.
+
+Le backend a retourné :
+
+```text
+status = received
+```
+
+sans erreur.
+
+Cela confirme que :
+
+```text
+Meta / Internet
+       |
+       v
+Tunnel Cloudflare
+       |
+       v
+FastAPI POST webhook
+```
+
+est fonctionnel.
+
+---
+
+## Abonnement de l'application au WABA
+
+La présence d'une Callback URL valide ne suffit pas à elle seule pour recevoir les messages.
+
+L'application doit également être abonnée au :
+
+```text
+WhatsApp Business Account
+```
+
+L'abonnement a été vérifié puis effectué à travers :
+
+```text
+/{WABA_ID}/subscribed_apps
+```
+
+L'opération a retourné :
+
+```json
+{
+  "success": true
+}
+```
+
+---
+
+## Abonnement au champ messages
+
+Dans la configuration Meta, le champ :
+
+```text
+messages
+```
+
+a été activé pour le webhook.
+
+Après configuration :
+
+```text
+Application
+    |
+    v
+WABA
+    |
+    v
+messages
+    |
+    v
+Webhook
+```
+
+les messages entrants ont commencé à générer des requêtes POST vers le backend.
+
+---
+
+## Expiration du token temporaire
+
+Pendant les essais, un token Meta temporaire a expiré.
+
+Les appels Graph API ont alors retourné une erreur d'authentification.
+
+Un nouveau token temporaire a été généré depuis l'environnement développeur Meta puis replacé dans :
+
+```text
+.env
+```
+
+Le backend a ensuite été redémarré afin de recharger la configuration.
+
+Aucun token réel n'est enregistré dans la documentation ou dans Git.
+
+---
+
+## Validation réelle de la réception
+
+Après la configuration du WABA, du champ `messages` et du webhook, un message envoyé depuis WhatsApp a atteint le backend.
+
+Les logs ont montré des appels :
+
+```text
+POST /api/v1/whatsapp/webhook
+```
+
+avec :
+
+```text
+HTTP 200
+```
+
+La chaîne entrante est donc validée :
+
+```text
+Téléphone utilisateur
+        |
+        v
+WhatsApp
+        |
+        v
+Meta
+        |
+        v
+Cloudflare
+        |
+        v
+FastAPI
+```
+
+---
+
+## Validation du thread_id réel
+
+Lors du traitement d'un message WhatsApp réel, le numéro de l'expéditeur est transmis au service Chat comme :
+
+```text
+thread_id
+```
+
+Le principe défini dans les tests automatisés a donc également été observé dans l'intégration réelle.
+
+Le flux est :
+
+```text
+sender WhatsApp
+      |
+      v
+thread_id
+      |
+      v
+process_chat()
+```
+
+---
+
+## Validation des réponses statiques
+
+Plusieurs types de requêtes simples ont permis de vérifier le passage dans l'Agent conversationnel.
+
+Les routes observées comprennent notamment :
+
+```text
+greeting
+capabilities
+clarify
+```
+
+Ces traitements ne nécessitent pas systématiquement Gemini.
+
+Une salutation envoyée depuis le téléphone a permis de valider la chaîne complète.
+
+---
+
+## Validation end-to-end du texte WhatsApp
+
+La réponse statique générée par le backend a été renvoyée par WhatsApp Cloud API puis reçue sur le téléphone.
+
+Le flux complet suivant est donc validé :
+
+```text
+Téléphone utilisateur
+        |
+        v
+WhatsApp
+        |
+        v
+Meta
+        |
+        v
+Webhook
+        |
+        v
+FastAPI
+        |
+        v
+BackgroundTasks
+        |
+        v
+process_chat()
+        |
+        v
+Agent
+        |
+        v
+Réponse
+        |
+        v
+Graph API
+        |
+        v
+WhatsApp
+        |
+        v
+Téléphone utilisateur
+```
+
+Cette validation confirme que la partie texte de B8 fonctionne réellement de bout en bout.
+
+---
+
+## Test d'une requête météorologique
+
+Une question météorologique a ensuite été envoyée depuis WhatsApp.
+
+Les logs ont confirmé :
+
+```text
+route = rag
+intent = meteo_generale
+retrieval = true
+```
+
+Le Retriever hybride et Qdrant ont donc été atteints correctement.
+
+La récupération documentaire s'est exécutée avant l'appel au modèle de génération.
+
+---
+
+## Diagnostic de la génération Gemini
+
+La génération a ensuite retourné :
+
+```text
+service_unavailable
+```
+
+Afin de distinguer une erreur du pipeline d'une erreur du fournisseur LLM, un appel Gemini direct et indépendant a été effectué.
+
+Résultat :
+
+```text
+SUCCESS = False
+ERROR = service_unavailable
+```
+
+Le détail retourné était :
+
+```text
+503 UNAVAILABLE
+```
+
+avec une indication de forte demande temporaire sur le modèle.
+
+Cette erreur confirme que :
+
+```text
+Webhook WhatsApp     : fonctionnel
+process_chat         : fonctionnel
+Agent                : fonctionnel
+Retriever            : fonctionnel
+Qdrant               : fonctionnel
+appel Gemini         : atteint
+service Gemini       : temporairement indisponible
+```
+
+L'erreur ne provenait donc pas de l'intégration WhatsApp.
+
+---
+
+## Classification des erreurs Gemini
+
+La logique existante distingue notamment :
+
+```text
+429 -> rate_limit
+
+503 -> service_unavailable
+```
+
+Le cas observé pendant les essais correspondait bien à :
+
+```text
+503 -> service_unavailable
+```
+
+Aucune modification du mapping d'erreurs n'a été nécessaire.
+
+---
+
+## Warning AFC Gemini
+
+Pendant l'appel de génération, un warning lié à l'utilisation directe de l'Automatic Function Calling a également été affiché.
+
+Ce warning n'a pas été identifié comme la cause de l'échec.
+
+L'erreur réelle renvoyée par l'API reste :
+
+```text
+503 UNAVAILABLE
+```
+
+Le warning AFC est donc distinct de l'indisponibilité temporaire du service.
+
+---
+
+## État du token Meta pendant le développement
+
+Le token utilisé actuellement pour les essais est temporaire.
+
+Il permet :
+
+```text
+envoi de messages
+appels Graph API
+gestion des abonnements nécessaires aux tests
+```
+
+mais doit être renouvelé lorsqu'il expire.
+
+Cette contrainte est acceptable pour la phase de développement actuelle.
+
+Le passage à une authentification plus durable est volontairement reporté après l'intégration audio WhatsApp.
+
+---
+
+## État du tunnel pendant le développement
+
+Le backend utilise actuellement un Quick Tunnel Cloudflare.
+
+Cette solution permet de recevoir les webhooks Meta pendant les tests sans déployer immédiatement l'application sur un serveur distant.
+
+Limite actuelle :
+
+```text
+redémarrage tunnel
+      |
+      v
+nouvelle URL
+      |
+      v
+mise à jour Callback URL Meta
+```
+
+La mise en place d'une URL stable est reportée après l'intégration audio.
+
+---
+
+## Portée de la validation actuelle
+
+À ce stade, B8 permet déjà des interactions WhatsApp texte normales dans l'environnement de test Meta.
+
+La chaîne suivante fonctionne :
+
+```text
+message texte utilisateur
+        |
+        v
+webhook Meta
+        |
+        v
+backend
+        |
+        v
+Agent
+        |
+        v
+réponse
+        |
+        v
+WhatsApp utilisateur
+```
+
+Les limitations actuelles concernent principalement :
+
+```text
+token temporaire
+URL Cloudflare temporaire
+messages vocaux non encore intégrés
+sécurité de production non finalisée
+```
+
+Ces limitations n'empêchent pas les tests fonctionnels texte.
+
+---
+
+## Sécurité actuelle
+
+Les secrets WhatsApp restent dans :
+
+```text
+.env
+```
+
+et ne doivent jamais être affichés dans :
+
+```text
+logs
+tests
+documentation
+commits Git
+```
+
+Les fichiers de configuration versionnés ne doivent contenir que des valeurs neutres.
+
+Les éléments concernés sont notamment :
+
+```text
+WHATSAPP_ACCESS_TOKEN
+WHATSAPP_VERIFY_TOKEN
+Phone Number ID réel
+autres identifiants sensibles Meta
+```
+
+---
+
+## Points restant à renforcer
+
+Certaines améliorations sont volontairement reportées après l'intégration audio.
+
+Elles concernent notamment :
+
+```text
+token Meta durable
+URL webhook stable
+gestion des doublons de message
+validation de signature webhook
+durcissement de la gestion des erreurs
+finalisation des logs WhatsApp
+```
+
+Ces éléments correspondent à la phase de stabilisation de B8 et non au premier fonctionnement du canal texte.
+
+---
+
+## Tests B8 actuellement validés
+
+Tests ciblés :
+
+```powershell
+python -m pytest backend/tests/test_whatsapp.py -q
+```
+
+Résultat :
+
+```text
+9 passed
+```
+
+Tests complets du backend :
+
+```powershell
+python -m pytest backend/tests -q
+```
+
+Résultat :
+
+```text
+51 passed
+```
+
+Contrôle Git :
+
+```powershell
+git diff --check
+```
+
+Ce contrôle permet également de détecter les espaces résiduels ou problèmes de formatage avant le commit.
+
+---
+
+## Architecture texte B8 validée
+
+```text
+Utilisateur WhatsApp
+        |
+        v
+Meta WhatsApp Cloud API
+        |
+        v
+Webhook HTTPS
+        |
+        v
+GET /api/v1/whatsapp/webhook
+        |
+        +--> vérification Meta
+
+POST /api/v1/whatsapp/webhook
+        |
+        v
+extract_text_messages()
+        |
+        v
+WhatsAppTextMessage
+        |
+        v
+BackgroundTasks
+        |
+        v
+process_whatsapp_text_message()
+        |
+        v
+process_chat(
+    query=message.text,
+    thread_id=message.sender
+)
+        |
+        v
+Agent
+        |
+        +--> static
+        |
+        +--> clarify
+        |
+        +--> direct_llm
+        |
+        +--> RAG
+        |
+        v
+ChatResponse
+        |
+        v
+send_whatsapp_text_message()
+        |
+        v
+Meta Graph API
+        |
+        v
+Utilisateur WhatsApp
+```
+
+---
+
+## État actuel de B8
+
+La partie texte de B8 est considérée comme fonctionnelle.
+
+```text
+Configuration locale WhatsApp       : validée
+Feature flag                         : validé
+Webhook GET                          : validé
+Webhook POST                         : validé
+Verify token                         : validé
+Parsing texte                        : validé
+Schéma WhatsAppTextMessage           : validé
+BackgroundTasks                      : validé
+Numéro utilisateur comme thread_id   : validé
+Connexion process_chat               : validée
+Envoi Graph API                      : validé
+Mock HTTP                            : validé
+Tunnel HTTPS                         : validé
+Configuration Meta                   : validée
+Abonnement WABA                      : validé
+Abonnement messages                  : validé
+Réception réelle                     : validée
+Envoi réel                           : validé
+Interaction texte end-to-end         : validée
+Passage vers le RAG                  : validé
+Tests WhatsApp                       : 9 passed
+Tests backend                        : 51 passed
+```
+
+La phase B8 complète reste toutefois en cours car les messages vocaux ne sont pas encore reliés à la couche audio B7.
+
+---
+
+## Prochaine étape : messages vocaux WhatsApp
+
+L'étape suivante consiste à étendre le flux existant pour prendre en charge :
+
+```text
+message vocal WhatsApp
+        |
+        v
+webhook Meta
+        |
+        v
+identifiant média
+        |
+        v
+récupération du média
+        |
+        v
+fichier audio temporaire
+        |
+        v
+audio_service.py
+        |
+        v
+Speech-to-Text
+        |
+        v
+process_chat()
+        |
+        v
+réponse WhatsApp
+```
+
+L'objectif est de réutiliser directement B7 plutôt que de recréer une nouvelle logique Speech dans `whatsapp_service.py`.
+
+---
+
+## Travaux restant après l'audio
+
+Après validation des messages vocaux, les derniers travaux B8 seront :
+
+```text
+1. stabilisation du token Meta
+
+2. mise en place d'une URL webhook stable
+
+3. gestion des doublons éventuels de messages
+
+4. amélioration de la sécurité du webhook
+
+5. gestion des erreurs médias
+
+6. finalisation des tests WhatsApp
+
+7. validation end-to-end texte et audio
+
+8. mise à jour finale de la documentation
+
+9. commit de la phase B8
+
+10. fusion dans develop
+```
+
+---
+
+## Statut B8
+
+```text
+WhatsApp texte : VALIDÉ
+
+WhatsApp audio : À INTÉGRER
+
+Stabilisation environnement Meta : À FINALISER
+```
+
+**Statut global B8 : EN COURS**

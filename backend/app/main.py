@@ -20,6 +20,10 @@ from backend.app.api.routes.audio import (
     router as audio_router,
 )
 
+from backend.app.api.routes.whatsapp import (
+    router as whatsapp_router,
+)
+
 
 def create_app() -> FastAPI:
     """
@@ -61,6 +65,10 @@ def create_app() -> FastAPI:
         prefix=settings.api_v1_prefix,
     )
 
+    application.include_router(
+        whatsapp_router,
+        prefix=settings.api_v1_prefix,
+    )
     application.include_router(
         admin_update_router,
         prefix=settings.api_v1_prefix,
