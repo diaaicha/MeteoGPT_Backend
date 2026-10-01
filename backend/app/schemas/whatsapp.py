@@ -12,6 +12,15 @@ class WhatsAppTextMessage(BaseModel):
 
     text: str
 
+class WhatsAppAudioMessage(BaseModel):
+    """
+    Message audio WhatsApp normalisé depuis un webhook Meta.
+    """
+
+    sender: str
+    message_id: str
+    media_id: str
+    mime_type: str | None = None
 
 class WhatsAppWebhookResponse(BaseModel):
     """

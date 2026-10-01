@@ -4360,19 +4360,44 @@ Ces éléments correspondent à la phase de stabilisation de B8 et non au premie
 
 ## Tests B8 actuellement validés
 
-Tests ciblés :
+La phase B8 a été développée progressivement afin de valider séparément le canal texte, la réception audio, puis la réponse vocale complète.
+
+### Évolution des tests WhatsApp
+
+La première version fonctionnelle du canal texte disposait de :
+
+```text
+9 tests WhatsApp validés
+```
+
+L'intégration progressive de la réception des messages vocaux et des opérations sur les médias Meta a ensuite porté la suite de tests à :
+
+```text
+15 tests WhatsApp validés
+```
+
+Les fonctions nécessaires à la réponse vocale ont ensuite été ajoutées et testées séparément :
+
+```text
+16 tests : ajout de la conversion WAV -> OGG/Opus
+17 tests : ajout de l'upload d'un média vers Meta
+18 tests : ajout de l'envoi d'un message audio WhatsApp
+19 tests : ajout du fallback texte en cas d'échec de la chaîne audio sortante
+```
+
+La commande de validation ciblée finale est :
 
 ```powershell
 python -m pytest backend/tests/test_whatsapp.py -q
 ```
 
-Résultat :
+Résultat final :
 
 ```text
-9 passed
+19 passed
 ```
 
-Tests complets du backend :
+Les tests complets du backend ont ensuite été exécutés :
 
 ```powershell
 python -m pytest backend/tests -q
@@ -4381,117 +4406,98 @@ python -m pytest backend/tests -q
 Résultat :
 
 ```text
-51 passed
+61 passed, 1 warning
 ```
 
-Contrôle Git :
+Le contrôle de cohérence Git a également été exécuté :
 
 ```powershell
 git diff --check
 ```
 
-Ce contrôle permet également de détecter les espaces résiduels ou problèmes de formatage avant le commit.
+Aucune erreur de formatage n'a été signalée.
 
 ---
 
-## Architecture texte B8 validée
+## Extension du webhook aux messages vocaux
+
+Le webhook B8 prend désormais en charge deux types de messages entrants :
 
 ```text
-Utilisateur WhatsApp
-        |
-        v
-Meta WhatsApp Cloud API
-        |
-        v
-Webhook HTTPS
-        |
-        v
-GET /api/v1/whatsapp/webhook
-        |
-        +--> vérification Meta
-
-POST /api/v1/whatsapp/webhook
-        |
-        v
-extract_text_messages()
-        |
-        v
-WhatsAppTextMessage
-        |
-        v
-BackgroundTasks
-        |
-        v
-process_whatsapp_text_message()
-        |
-        v
-process_chat(
-    query=message.text,
-    thread_id=message.sender
-)
-        |
-        v
-Agent
-        |
-        +--> static
-        |
-        +--> clarify
-        |
-        +--> direct_llm
-        |
-        +--> RAG
-        |
-        v
-ChatResponse
-        |
-        v
-send_whatsapp_text_message()
-        |
-        v
-Meta Graph API
-        |
-        v
-Utilisateur WhatsApp
+message texte
+message audio
 ```
 
----
-
-## État actuel de B8
-
-La partie texte de B8 est considérée comme fonctionnelle.
+Lorsqu'un message audio est reçu, le webhook extrait notamment :
 
 ```text
-Configuration locale WhatsApp       : validée
-Feature flag                         : validé
-Webhook GET                          : validé
-Webhook POST                         : validé
-Verify token                         : validé
-Parsing texte                        : validé
-Schéma WhatsAppTextMessage           : validé
-BackgroundTasks                      : validé
-Numéro utilisateur comme thread_id   : validé
-Connexion process_chat               : validée
-Envoi Graph API                      : validé
-Mock HTTP                            : validé
-Tunnel HTTPS                         : validé
-Configuration Meta                   : validée
-Abonnement WABA                      : validé
-Abonnement messages                  : validé
-Réception réelle                     : validée
-Envoi réel                           : validé
-Interaction texte end-to-end         : validée
-Passage vers le RAG                  : validé
-Tests WhatsApp                       : 9 passed
-Tests backend                        : 51 passed
+numéro de l'expéditeur
+identifiant du message
+identifiant du média Meta
+type MIME du média
 ```
 
-La phase B8 complète reste toutefois en cours car les messages vocaux ne sont pas encore reliés à la couche audio B7.
+Ces informations sont représentées par le schéma :
+
+```text
+WhatsAppAudioMessage
+```
+
+Le numéro WhatsApp de l'utilisateur reste utilisé comme `thread_id`, ce qui permet de conserver la même logique de continuité conversationnelle que pour les messages texte.
 
 ---
 
-## Prochaine étape : messages vocaux WhatsApp
+## Récupération des médias audio Meta
 
-L'étape suivante consiste à étendre le flux existant pour prendre en charge :
+Un message vocal reçu par le webhook ne contient pas directement les données binaires du fichier audio.
+
+La récupération est réalisée en deux étapes :
+
+```text
+media_id
+   |
+   v
+récupération des métadonnées Meta
+   |
+   v
+URL temporaire du média
+   |
+   v
+téléchargement authentifié du contenu audio
+```
+
+Deux fonctions dédiées sont utilisées :
+
+```text
+get_whatsapp_media_metadata()
+download_whatsapp_media()
+```
+
+Le média téléchargé est enregistré dans un fichier temporaire avant d'être transmis à la couche audio développée en B7.
+
+Les fichiers temporaires sont supprimés à la fin du traitement.
+
+---
+
+## Validation réelle de la réception audio
+
+La chaîne de réception a été testée avec un véritable message vocal envoyé depuis WhatsApp.
+
+Le premier essai de récupération du média a retourné une erreur d'authentification HTTP `401`.
+
+L'analyse a montré que le token Meta utilisé n'était plus valide pour la récupération du média.
+
+Après renouvellement de l'authentification, la récupération du média a fonctionné.
+
+Un second problème de configuration a ensuite été détecté lors de l'envoi de la réponse :
+
+```text
+WHATSAPP_PHONE_NUMBER_ID manquant
+```
+
+La configuration locale a été corrigée sans exposer les secrets dans le dépôt Git.
+
+Après ces corrections, le flux réel suivant a été validé :
 
 ```text
 message vocal WhatsApp
@@ -4500,67 +4506,683 @@ message vocal WhatsApp
 webhook Meta
         |
         v
-identifiant média
+media_id
         |
         v
-récupération du média
+métadonnées du média
         |
         v
-fichier audio temporaire
+téléchargement audio
         |
         v
-audio_service.py
+pipeline audio B7
+        |
+        v
+réponse texte WhatsApp
+```
+
+Cette étape a permis de valider la réception des vocaux avant l'intégration de la réponse vocale.
+
+---
+
+## Stabilisation de l'authentification Meta
+
+Les premiers essais ont utilisé un token temporaire fourni par l'environnement de test Meta.
+
+Ce mécanisme n'étant pas adapté à une utilisation durable, la configuration a ensuite été associée à un System User disposant des ressources WhatsApp nécessaires.
+
+Un token destiné à un usage durable a alors été configuré localement.
+
+Les informations sensibles restent exclusivement dans l'environnement local et ne doivent pas être ajoutées au dépôt Git.
+
+Les éléments suivants ne doivent notamment jamais être versionnés :
+
+```text
+access token Meta
+verify token privé
+identifiants sensibles
+fichier .env
+```
+
+---
+
+## Réutilisation de la couche audio B7
+
+La prise en charge audio de WhatsApp ne recrée pas de logique Speech-to-Text ou Text-to-Speech spécifique dans `whatsapp_service.py`.
+
+Elle réutilise directement :
+
+```text
+audio_service.process_audio_chat()
+```
+
+Pour une interaction vocale WhatsApp, l'appel utilise désormais :
+
+```text
+output_mode="audio"
+```
+
+ainsi qu'un chemin explicite pour le fichier audio généré :
+
+```text
+audio_output_path=<fichier WAV temporaire>
+```
+
+La responsabilité des composants reste ainsi séparée.
+
+### Couche B7
+
+```text
+audio utilisateur
         |
         v
 Speech-to-Text
         |
         v
-process_chat()
+pipeline conversationnel
         |
         v
-réponse WhatsApp
+réponse textuelle
+        |
+        v
+Text-to-Speech
+        |
+        v
+WAV
 ```
 
-L'objectif est de réutiliser directement B7 plutôt que de recréer une nouvelle logique Speech dans `whatsapp_service.py`.
+### Couche B8
+
+```text
+WAV
+ |
+ v
+conversion WhatsApp
+ |
+ v
+upload Meta
+ |
+ v
+envoi du vocal
+```
+
+Cette séparation évite de dupliquer les traitements audio déjà développés et testés dans B7.
 
 ---
 
-## Travaux restant après l'audio
+## Format audio de sortie
 
-Après validation des messages vocaux, les derniers travaux B8 seront :
+La synthèse vocale de B7 produit un fichier WAV.
+
+Pour l'envoi d'un message vocal WhatsApp, une étape de conversion a été ajoutée afin de produire un fichier OGG utilisant le codec Opus.
+
+La fonction dédiée est :
 
 ```text
-1. stabilisation du token Meta
-
-2. mise en place d'une URL webhook stable
-
-3. gestion des doublons éventuels de messages
-
-4. amélioration de la sécurité du webhook
-
-5. gestion des erreurs médias
-
-6. finalisation des tests WhatsApp
-
-7. validation end-to-end texte et audio
-
-8. mise à jour finale de la documentation
-
-9. commit de la phase B8
-
-10. fusion dans develop
+convert_wav_to_whatsapp_ogg()
 ```
+
+Le traitement repose sur FFmpeg avec `libopus`.
+
+La chaîne de conversion est :
+
+```text
+WAV
+ |
+ v
+FFmpeg
+ |
+ v
+libopus
+ |
+ v
+OGG/Opus
+```
+
+La configuration utilisée produit un flux mono adapté à la voix.
+
+---
+
+## Installation et validation de FFmpeg
+
+FFmpeg n'était pas initialement disponible dans l'environnement local.
+
+Il a été installé sur la machine de développement, puis sa disponibilité a été contrôlée avec :
+
+```powershell
+ffmpeg -version
+```
+
+La version installée dispose du support :
+
+```text
+libopus
+```
+
+Un premier test local de conversion a été effectué avec un fichier WAV contenant une tonalité synthétique.
+
+Ce fichier avait uniquement pour objectif de tester :
+
+```text
+création du WAV
+conversion FFmpeg
+création du conteneur OGG
+codec Opus
+lecture du fichier obtenu
+```
+
+Il ne contenait volontairement aucune parole.
+
+Le résultat de conversion a ensuite été inspecté et le fichier OGG/Opus produit a été validé.
+
+---
+
+## Validation réelle de la synthèse vocale
+
+Après la validation technique de la conversion, la synthèse vocale réelle de B7 a été testée séparément.
+
+Le pipeline TTS a produit un fichier WAV contenant une phrase parlée.
+
+Les contrôles réalisés ont confirmé :
+
+```text
+génération TTS réussie
+fichier WAV créé
+fichier non vide
+audio audible
+phrase synthétisée correctement
+```
+
+Cela a permis de distinguer clairement :
+
+```text
+test technique avec tonalité
+        !=
+test réel de synthèse vocale
+```
+
+---
+
+## Upload des médias vers Meta
+
+Une fonction dédiée permet d'envoyer le fichier OGG généré vers l'API Meta :
+
+```text
+upload_whatsapp_media()
+```
+
+Le flux est :
+
+```text
+fichier OGG/Opus local
+        |
+        v
+POST média Meta
+        |
+        v
+media_id
+```
+
+La fonction a d'abord été validée avec un client HTTP simulé afin de vérifier :
+
+```text
+endpoint utilisé
+authentification
+multipart
+messaging_product
+fichier envoyé
+type MIME
+récupération du media_id
+```
+
+Un test réel a ensuite confirmé que Meta acceptait effectivement le fichier OGG et retournait un identifiant média valide.
+
+---
+
+## Envoi d'un message vocal WhatsApp
+
+L'envoi d'un média audio déjà chargé sur Meta est assuré par :
+
+```text
+send_whatsapp_audio_message()
+```
+
+La fonction transmet notamment :
+
+```text
+destinataire
+media_id
+type audio
+voice=True
+```
+
+Elle a d'abord été testée avec un client HTTP simulé.
+
+Un test réel a ensuite permis de confirmer :
+
+```text
+upload média réussi
+media_id obtenu
+requête d'envoi acceptée
+message_id retourné
+audio reçu sur WhatsApp
+```
+
+Le premier fichier utilisé pour ce test contenait uniquement la tonalité synthétique servant au contrôle du transport.
+
+Le fait qu'aucune parole ne soit présente dans ce fichier était donc attendu et ne constituait pas une erreur de la chaîne WhatsApp.
+
+---
+
+## Validation d'un véritable vocal synthétisé
+
+Après validation séparée du TTS et de la chaîne Meta, un véritable fichier WAV généré par B7 a été utilisé.
+
+Le flux réel testé a été :
+
+```text
+TTS B7
+  |
+  v
+WAV
+  |
+  v
+conversion OGG/Opus
+  |
+  v
+upload Meta
+  |
+  v
+media_id
+  |
+  v
+envoi WhatsApp
+  |
+  v
+smartphone
+```
+
+Les contrôles ont confirmé :
+
+```text
+conversion réussie
+upload réussi
+envoi réussi
+message_id présent
+vocal reçu sur WhatsApp
+phrase audible et correcte
+```
+
+La chaîne audio sortante était donc validée avant son intégration automatique au webhook.
+
+---
+
+## Intégration automatique audio vers audio
+
+La fonction :
+
+```text
+process_whatsapp_audio_message()
+```
+
+a ensuite été étendue afin d'utiliser automatiquement le mode audio de B7.
+
+Le flux final est désormais :
+
+```text
+message vocal utilisateur
+        |
+        v
+webhook WhatsApp
+        |
+        v
+media_id
+        |
+        v
+récupération des métadonnées
+        |
+        v
+téléchargement du média
+        |
+        v
+fichier audio entrant temporaire
+        |
+        v
+audio_service.process_audio_chat()
+        |
+        | output_mode="audio"
+        |
+        v
+Speech-to-Text
+        |
+        v
+pipeline conversationnel
+        |
+        v
+Text-to-Speech
+        |
+        v
+WAV temporaire
+        |
+        v
+convert_wav_to_whatsapp_ogg()
+        |
+        v
+OGG/Opus temporaire
+        |
+        v
+upload_whatsapp_media()
+        |
+        v
+media_id
+        |
+        v
+send_whatsapp_audio_message()
+        |
+        v
+réponse vocale WhatsApp
+```
+
+Le numéro de l'expéditeur est transmis comme :
+
+```text
+thread_id
+```
+
+ce qui permet de conserver le contexte conversationnel par utilisateur.
+
+---
+
+## Fallback texte
+
+La génération d'une réponse textuelle et sa synthèse vocale sont deux opérations distinctes.
+
+Il est donc possible que le pipeline conversationnel produise correctement une réponse alors qu'une étape ultérieure de la chaîne audio échoue.
+
+Un mécanisme de fallback a été ajouté.
+
+Si une erreur intervient notamment pendant :
+
+```text
+conversion WAV -> OGG/Opus
+upload du média
+envoi du vocal
+```
+
+et qu'une réponse textuelle est disponible, celle-ci peut être envoyée à l'utilisateur via :
+
+```text
+send_whatsapp_text_message()
+```
+
+Le comportement testé est :
+
+```text
+réponse conversationnelle disponible
+        |
+        v
+échec chaîne audio sortante
+        |
+        v
+fallback texte
+        |
+        v
+réponse WhatsApp conservée
+```
+
+Un test spécifique valide ce scénario.
+
+---
+
+## Gestion des fichiers temporaires
+
+Le traitement d'un message vocal peut créer jusqu'à trois fichiers temporaires :
+
+```text
+audio entrant téléchargé
+WAV produit par le TTS
+OGG/Opus destiné à WhatsApp
+```
+
+Ces fichiers sont utilisés uniquement pendant la durée du traitement.
+
+La fonction assure leur suppression dans son bloc de nettoyage, y compris après le traitement nominal.
+
+Les tests contrôlent notamment que les chemins temporaires n'existent plus après exécution.
+
+---
+
+## Validation end-to-end réelle audio vers audio
+
+Après validation des composants isolés et des tests automatisés, un test réel a été effectué depuis un téléphone WhatsApp.
+
+Le flux testé était :
+
+```text
+utilisateur
+   |
+   | message vocal
+   v
+WhatsApp
+   |
+   v
+Meta Cloud API
+   |
+   v
+webhook HTTPS
+   |
+   v
+backend
+   |
+   v
+téléchargement audio
+   |
+   v
+STT
+   |
+   v
+pipeline conversationnel
+   |
+   v
+TTS
+   |
+   v
+WAV
+   |
+   v
+OGG/Opus
+   |
+   v
+upload Meta
+   |
+   v
+réponse vocale WhatsApp
+   |
+   v
+utilisateur
+```
+
+Les validations réalisées ont confirmé :
+
+```text
+webhook reçu correctement
+traitement backend exécuté
+réponse vocale reçue
+audio audible
+réponse correcte
+aucune erreur bloquante dans le terminal
+```
+
+L'interaction WhatsApp audio vers audio est donc fonctionnelle de bout en bout dans l'environnement de développement actuel.
+
+---
+
+## Tunnel HTTPS de développement
+
+Les tests réels utilisent actuellement Cloudflare Tunnel afin d'exposer temporairement le serveur FastAPI local à Meta.
+
+Le tunnel est lancé avec :
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8000
+```
+
+Lors d'un essai, plusieurs tentatives de connexion QUIC ont temporairement échoué avant que Cloudflare établisse finalement la connexion :
+
+```text
+Registered tunnel connection
+protocol=quic
+```
+
+Le webhook est alors accessible publiquement via l'URL HTTPS générée.
+
+Cette solution est adaptée aux essais de développement, mais le Quick Tunnel utilisé actuellement ne constitue pas une URL stable de production.
+
+À chaque changement d'URL, la Callback URL configurée côté Meta doit être mise à jour.
+
+---
+
+## Architecture B8 finale validée
+
+```text
+                         Utilisateur WhatsApp
+                                  |
+                    +-------------+-------------+
+                    |                           |
+                 texte                        vocal
+                    |                           |
+                    v                           v
+              Webhook Meta                Webhook Meta
+                    |                           |
+                    v                           v
+       extract_text_messages()      extract_audio_messages()
+                    |                           |
+                    v                           v
+        WhatsAppTextMessage          WhatsAppAudioMessage
+                    |                           |
+                    v                           v
+           BackgroundTasks                media_id
+                    |                           |
+                    |                           v
+                    |                 métadonnées Meta
+                    |                           |
+                    |                           v
+                    |                  téléchargement
+                    |                           |
+                    |                           v
+                    |                    audio temporaire
+                    |                           |
+                    |                           v
+                    |                process_audio_chat()
+                    |                           |
+                    |                       STT / TTS
+                    |                           |
+                    |                           v
+                    |                          WAV
+                    |                           |
+                    |                           v
+                    |                      OGG/Opus
+                    |                           |
+                    v                           v
+             process_chat()              upload Meta
+                    |                           |
+                    v                           v
+              Agent / RAG                   media_id
+                    |                           |
+                    v                           v
+          réponse textuelle           envoi vocal WhatsApp
+                    |                           |
+                    +-------------+-------------+
+                                  |
+                                  v
+                         Utilisateur WhatsApp
+```
+
+---
+
+## État final de B8 avant stabilisation
+
+```text
+Configuration WhatsApp locale             : validée
+Feature flag                               : validé
+Webhook GET                                : validé
+Webhook POST                               : validé
+Verify token                               : validé
+Parsing texte                              : validé
+Parsing audio                              : validé
+WhatsAppTextMessage                        : validé
+WhatsAppAudioMessage                       : validé
+BackgroundTasks                            : validé
+Numéro utilisateur comme thread_id         : validé
+Connexion au pipeline conversationnel      : validée
+Envoi texte Graph API                      : validé
+Récupération métadonnées média             : validée
+Téléchargement média                       : validé
+Connexion à la couche audio B7             : validée
+Speech-to-Text                             : validé
+Text-to-Speech                             : validé
+Production WAV                             : validée
+FFmpeg                                     : validé
+libopus                                    : validé
+Conversion WAV -> OGG/Opus                 : validée
+Upload média Meta                          : validé
+Envoi audio WhatsApp                       : validé
+voice=True                                 : validé
+Fallback texte                             : validé
+Nettoyage fichiers temporaires             : validé
+Token Meta destiné à un usage durable      : configuré
+Interaction texte end-to-end réelle        : validée
+Réception vocale réelle                    : validée
+Sortie vocale réelle                       : validée
+Interaction audio -> audio end-to-end      : validée
+Tests WhatsApp                             : 19 passed
+Tests backend                              : 61 passed, 1 warning
+git diff --check                           : validé
+```
+
+---
+
+## Éléments de stabilisation restant à traiter
+
+Le fonctionnement fonctionnel de B8 est validé.
+
+Les éléments suivants relèvent désormais du durcissement et de la préparation à un environnement plus stable :
+
+```text
+URL webhook permanente
+gestion des doublons de messages
+validation de signature du webhook
+durcissement de la gestion des erreurs
+finalisation des logs spécifiques WhatsApp
+revue finale de sécurité
+```
+
+Le Quick Tunnel Cloudflare actuellement utilisé doit notamment être remplacé par une solution disposant d'une URL stable avant un déploiement durable.
+
+Ces éléments ne remettent pas en cause la validation fonctionnelle des flux texte et audio obtenue pendant B8.
 
 ---
 
 ## Statut B8
 
 ```text
-WhatsApp texte : VALIDÉ
+WhatsApp texte                 : VALIDÉ
 
-WhatsApp audio : À INTÉGRER
+WhatsApp audio entrant         : VALIDÉ
 
-Stabilisation environnement Meta : À FINALISER
+WhatsApp audio sortant         : VALIDÉ
+
+WhatsApp audio -> audio        : VALIDÉ
+
+Fallback texte                 : VALIDÉ
+
+Tests automatisés              : VALIDÉS
+
+Validation réelle sur téléphone: VALIDÉE
+
+Stabilisation / durcissement   : À FINALISER
 ```
 
-**Statut global B8 : EN COURS**
+**Statut fonctionnel B8 : VALIDÉ**
+
+**Statut global B8 : EN FINALISATION**

@@ -15,7 +15,9 @@ from backend.app.schemas.whatsapp import (
 )
 
 from backend.app.services.whatsapp_service import (
+    extract_audio_messages,
     extract_text_messages,
+    process_whatsapp_audio_message,
     process_whatsapp_text_message,
 )
 
@@ -146,18 +148,30 @@ async def receive_whatsapp_webhook(
             detail="Payload WhatsApp invalide.",
         )
 
-    messages = extract_text_messages(
+    text_messages = extract_text_messages(
         payload
     )
-    for message in messages:
+
+    audio_messages = extract_audio_messages(
+        payload
+    )
+
+    for message in text_messages:
         background_tasks.add_task(
             process_whatsapp_text_message,
-            message
+            message,
+        )
+
+    for message in audio_messages:
+        background_tasks.add_task(
+            process_whatsapp_audio_message,
+            message,
         )
 
     return WhatsAppWebhookResponse(
         status="received",
-        messages_received=len(
-            messages
+        messages_received=(
+            len(text_messages)
+            + len(audio_messages)
         ),
     )
