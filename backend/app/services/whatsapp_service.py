@@ -1,5 +1,9 @@
 import subprocess
 from typing import Any
+import hashlib
+import hmac
+from threading import Lock
+from time import monotonic
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -20,6 +24,105 @@ import httpx
 from backend.app.core.config import (
     get_settings,
 )
+
+_WHATSAPP_MESSAGE_TTL_SECONDS = 3600.0
+
+_processed_whatsapp_message_ids: dict[str, float] = {}
+
+_processed_whatsapp_message_ids_lock = Lock()
+
+
+def mark_whatsapp_message_if_new(
+    message_id: str,
+) -> bool:
+    """
+    Enregistre un message WhatsApp s'il n'a pas deja ete vu.
+
+    Les identifiants expirent automatiquement afin d'eviter
+    une croissance illimitee du registre en memoire.
+    """
+
+    message_id = str(
+        message_id
+    ).strip()
+
+    if not message_id:
+        return False
+
+    now = monotonic()
+
+    with _processed_whatsapp_message_ids_lock:
+
+        expired_ids = [
+            stored_message_id
+            for stored_message_id, expires_at
+            in _processed_whatsapp_message_ids.items()
+            if expires_at <= now
+        ]
+
+        for expired_id in expired_ids:
+            _processed_whatsapp_message_ids.pop(
+                expired_id,
+                None,
+            )
+
+        if (
+            message_id
+            in _processed_whatsapp_message_ids
+        ):
+            return False
+
+        _processed_whatsapp_message_ids[
+            message_id
+        ] = (
+            now
+            + _WHATSAPP_MESSAGE_TTL_SECONDS
+        )
+
+        return True
+
+def verify_whatsapp_webhook_signature(
+    *,
+    payload: bytes,
+    signature: str | None,
+    app_secret: str,
+) -> bool:
+    """
+    Vérifie la signature HMAC-SHA256 d'un webhook Meta.
+    """
+
+    if not payload:
+        return False
+
+    signature = str(
+        signature or ""
+    ).strip()
+
+    app_secret = str(
+        app_secret or ""
+    ).strip()
+
+    if (
+        not signature
+        or not app_secret
+        or not signature.startswith("sha256=")
+    ):
+        return False
+
+    received_signature = signature[
+        len("sha256="):
+    ]
+
+    expected_signature = hmac.new(
+        app_secret.encode("utf-8"),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(
+        expected_signature,
+        received_signature,
+    )
 
 def extract_text_messages(
     payload: dict[str, Any],

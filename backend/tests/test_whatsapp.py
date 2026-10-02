@@ -4,7 +4,35 @@ from fastapi.testclient import TestClient
 
 from backend.app.main import app
 from backend.app.api.routes import whatsapp as whatsapp_route
+import pytest
 
+@pytest.fixture(autouse=True)
+def reset_whatsapp_message_deduplication():
+    from backend.app.services import (
+        whatsapp_service,
+    )
+
+    with (
+        whatsapp_service
+        ._processed_whatsapp_message_ids_lock
+    ):
+        (
+            whatsapp_service
+            ._processed_whatsapp_message_ids
+            .clear()
+        )
+
+    yield
+
+    with (
+        whatsapp_service
+        ._processed_whatsapp_message_ids_lock
+    ):
+        (
+            whatsapp_service
+            ._processed_whatsapp_message_ids
+            .clear()
+        )
 
 client = TestClient(app)
 
@@ -1981,3 +2009,305 @@ def test_process_whatsapp_audio_message_fallback_text(
         captured["wav_path"].exists()
         is False
     )
+
+
+def test_whatsapp_message_deduplication_marks_first_as_new():
+    from backend.app.services import (
+        whatsapp_service,
+    )
+
+    message_id = "wamid.DEDUP_FIRST"
+
+    assert (
+        whatsapp_service
+        .mark_whatsapp_message_if_new(
+            message_id
+        )
+        is True
+    )
+
+    assert (
+        whatsapp_service
+        .mark_whatsapp_message_if_new(
+            message_id
+        )
+        is False
+    )
+
+
+def test_whatsapp_webhook_deduplicates_text_message(
+    monkeypatch,
+):
+    settings = SimpleNamespace(
+        enable_whatsapp=True,
+        whatsapp_verify_token="test-token",
+    )
+
+    monkeypatch.setattr(
+        whatsapp_route,
+        "get_settings",
+        lambda: settings,
+    )
+
+    processed = []
+
+    def fake_process_text_message(
+        message,
+    ):
+        processed.append(
+            message.message_id
+        )
+
+    monkeypatch.setattr(
+        whatsapp_route,
+        "process_whatsapp_text_message",
+        fake_process_text_message,
+    )
+
+    payload = {
+        "object":
+            "whatsapp_business_account",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "from":
+                                        "221770000000",
+                                    "id":
+                                        "wamid.DEDUP_TEXT",
+                                    "type":
+                                        "text",
+                                    "text": {
+                                        "body":
+                                            "Bonjour"
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ],
+    }
+
+    first_response = client.post(
+        "/api/v1/whatsapp/webhook",
+        json=payload,
+    )
+
+    second_response = client.post(
+        "/api/v1/whatsapp/webhook",
+        json=payload,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    assert processed == [
+        "wamid.DEDUP_TEXT"
+    ]
+
+
+def test_whatsapp_webhook_deduplicates_audio_message(
+    monkeypatch,
+):
+    settings = SimpleNamespace(
+        enable_whatsapp=True,
+        whatsapp_verify_token="test-token",
+    )
+
+    monkeypatch.setattr(
+        whatsapp_route,
+        "get_settings",
+        lambda: settings,
+    )
+
+    processed = []
+
+    def fake_process_audio_message(
+        message,
+    ):
+        processed.append(
+            message.message_id
+        )
+
+    monkeypatch.setattr(
+        whatsapp_route,
+        "process_whatsapp_audio_message",
+        fake_process_audio_message,
+    )
+
+    payload = {
+        "object":
+            "whatsapp_business_account",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "from":
+                                        "221770000000",
+                                    "id":
+                                        "wamid.DEDUP_AUDIO",
+                                    "type":
+                                        "audio",
+                                    "audio": {
+                                        "id":
+                                            "media-dedup-audio",
+                                        "mime_type":
+                                            "audio/ogg; codecs=opus",
+                                        "voice":
+                                            True,
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ],
+    }
+
+    first_response = client.post(
+        "/api/v1/whatsapp/webhook",
+        json=payload,
+    )
+
+    second_response = client.post(
+        "/api/v1/whatsapp/webhook",
+        json=payload,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    assert processed == [
+        "wamid.DEDUP_AUDIO"
+    ]
+
+
+def test_whatsapp_webhook_accepts_valid_signature(
+    monkeypatch,
+):
+    import hashlib
+    import hmac
+    import json
+
+    app_secret = "test-app-secret"
+
+    settings = SimpleNamespace(
+        enable_whatsapp=True,
+        whatsapp_verify_token="test-token",
+        whatsapp_app_secret=app_secret,
+    )
+
+    monkeypatch.setattr(
+        whatsapp_route,
+        "get_settings",
+        lambda: settings,
+    )
+
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [],
+    }
+
+    raw_payload = json.dumps(
+        payload,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    signature = (
+        "sha256="
+        + hmac.new(
+            app_secret.encode("utf-8"),
+            raw_payload,
+            hashlib.sha256,
+        ).hexdigest()
+    )
+
+    response = client.post(
+        "/api/v1/whatsapp/webhook",
+        content=raw_payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": signature,
+        },
+    )
+
+    assert response.status_code == 200
+
+    assert response.json() == {
+        "status": "received",
+        "messages_received": 0,
+    }
+
+
+def test_whatsapp_webhook_rejects_invalid_signature(
+    monkeypatch,
+):
+    import json
+
+    settings = SimpleNamespace(
+        enable_whatsapp=True,
+        whatsapp_verify_token="test-token",
+        whatsapp_app_secret="test-app-secret",
+    )
+
+    monkeypatch.setattr(
+        whatsapp_route,
+        "get_settings",
+        lambda: settings,
+    )
+
+    raw_payload = json.dumps(
+        {
+            "object": "whatsapp_business_account",
+            "entry": [],
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    response = client.post(
+        "/api/v1/whatsapp/webhook",
+        content=raw_payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256":
+                "sha256=invalid-signature",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_whatsapp_webhook_rejects_missing_signature(
+    monkeypatch,
+):
+    settings = SimpleNamespace(
+        enable_whatsapp=True,
+        whatsapp_verify_token="test-token",
+        whatsapp_app_secret="test-app-secret",
+    )
+
+    monkeypatch.setattr(
+        whatsapp_route,
+        "get_settings",
+        lambda: settings,
+    )
+
+    response = client.post(
+        "/api/v1/whatsapp/webhook",
+        json={
+            "object":
+                "whatsapp_business_account",
+            "entry": [],
+        },
+    )
+
+    assert response.status_code == 403

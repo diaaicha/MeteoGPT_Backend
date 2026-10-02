@@ -1,3 +1,4 @@
+import json
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -19,6 +20,8 @@ from backend.app.services.whatsapp_service import (
     extract_text_messages,
     process_whatsapp_audio_message,
     process_whatsapp_text_message,
+    mark_whatsapp_message_if_new,
+    verify_whatsapp_webhook_signature,
 )
 
 
@@ -130,8 +133,39 @@ async def receive_whatsapp_webhook(
             detail="Le service WhatsApp est désactivé.",
         )
 
+    raw_payload = await request.body()
+
+    app_secret = str(
+        getattr(
+            settings,
+            "whatsapp_app_secret",
+            "",
+        )
+        or ""
+    ).strip()
+
+    if app_secret:
+
+        signature = request.headers.get(
+            "X-Hub-Signature-256"
+        )
+
+        if not verify_whatsapp_webhook_signature(
+            payload=raw_payload,
+            signature=signature,
+            app_secret=app_secret,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Signature webhook WhatsApp invalide."
+                ),
+            )
+
     try:
-        payload = await request.json()
+        payload = json.loads(
+            raw_payload
+        )
 
     except Exception as exc:
         raise HTTPException(
@@ -157,12 +191,25 @@ async def receive_whatsapp_webhook(
     )
 
     for message in text_messages:
+
+        if not mark_whatsapp_message_if_new(
+            message.message_id
+        ):
+            continue
+
         background_tasks.add_task(
             process_whatsapp_text_message,
             message,
         )
 
+
     for message in audio_messages:
+
+        if not mark_whatsapp_message_if_new(
+            message.message_id
+        ):
+            continue
+
         background_tasks.add_task(
             process_whatsapp_audio_message,
             message,
