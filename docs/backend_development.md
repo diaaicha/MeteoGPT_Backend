@@ -5139,6 +5139,66 @@ Tests WhatsApp                             : 19 passed
 Tests backend                              : 61 passed, 1 warning
 git diff --check                           : validé
 ```
+---
+
+## Déduplication des messages WhatsApp
+
+Afin d'éviter le retraitement d'un même événement lorsque Meta transmet plusieurs fois un webhook contenant le même message, un mécanisme d'idempotence a été ajouté.
+
+Chaque message texte ou audio possède déjà un identifiant Meta unique :
+
+```text
+message_id
+```
+
+Avant de programmer son traitement en arrière-plan, le webhook vérifie désormais si cet identifiant a déjà été rencontré.
+
+Le fonctionnement est :
+
+```text
+message reçu
+    |
+    v
+message_id
+    |
+    v
+registre temporaire
+    |
+    +--> déjà présent -> message ignoré
+    |
+    +--> nouveau -> enregistrement puis BackgroundTask
+```
+
+Le registre est maintenu en mémoire avec une durée de validité limitée afin d'éviter une croissance indéfinie. Un verrou protège l'opération de vérification et d'enregistrement contre des traitements concurrents.
+
+La déduplication intervient avant les traitements coûteux. Elle évite notamment, pour un même vocal :
+
+```text
+téléchargement média répété
+STT répété
+génération conversationnelle répétée
+TTS répété
+conversion audio répétée
+upload Meta répété
+double réponse à l'utilisateur
+```
+
+Cette solution est adaptée à l'environnement actuel utilisant un seul processus applicatif. Dans un déploiement distribué ou multi-instance, le registre en mémoire devra être remplacé par un stockage partagé, par exemple Redis ou une base persistante.
+
+Les tests automatisés couvrent :
+
+```text
+premier message accepté
+même message texte reçu deux fois
+même message audio reçu deux fois
+```
+
+Résultats après intégration :
+
+```text
+Tests WhatsApp : 22 passed
+Tests backend  : 64 passed
+```
 
 ---
 
