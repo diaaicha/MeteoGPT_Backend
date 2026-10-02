@@ -1148,6 +1148,32 @@ Pour la pêche et la navigation :
             "clairement qu'elle est expirée pour la demande actuelle."
         )
 
+
+    elif data_status == "alternative_same_date":
+
+        system_prompt += (
+            "\n\nRÈGLE DE REPLI SUR DES BULLETINS DE LA MÊME PÉRIODE\n"
+            "- Aucun bulletin météorologique général correspondant à la période "
+            "demandée n'a été trouvé.\n"
+            "- Le contexte fourni contient toutefois des bulletins sectoriels "
+            "ANACIM couvrant cette même période.\n"
+            "- Utilise ces bulletins pour fournir les informations "
+            "météorologiques réellement disponibles.\n"
+            "- Indique clairement qu'il s'agit de bulletins sectoriels "
+            "et non d'un bulletin météorologique général.\n"
+            "- Si la question mentionne une localité, n'affirme que les "
+            "conditions explicitement associées à cette localité dans le "
+            "contenu météorologique.\n"
+            "- Une localité apparaissant uniquement dans l'en-tête, "
+            "l'adresse, la signature ou les coordonnées administratives "
+            "du document ne constitue pas une prévision pour cette localité.\n"
+            "- Si aucune information météorologique spécifique à la localité "
+            "demandée n'est présente, indique-le clairement puis résume les "
+            "informations sectorielles disponibles pour la période demandée.\n"
+            "- Ne transforme jamais un bulletin de pêche ou de navigation "
+            "en prévision météorologique générale."
+        )
+
     # --------------------------------------------------------
     # Règles multimodales
     # --------------------------------------------------------
@@ -1734,6 +1760,13 @@ def construire_reponse_statique(
             "les conditions locales, les informations utiles à la pêche "
             "et à la navigation côtière, ainsi qu'expliquer simplement "
             "des phénomènes météorologiques."
+        )
+
+    if intent == "conversation":
+
+        return (
+            "Très bien. Je reste disponible si vous souhaitez "
+            "poser une question météorologique."
         )
 
     if intent == "personalization":

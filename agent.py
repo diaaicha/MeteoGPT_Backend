@@ -103,6 +103,8 @@ INTENT_CAPABILITIES = "capabilities"
 
 INTENT_PERSONALIZATION = "personalization"
 
+INTENT_CONVERSATION = "conversation"
+
 INTENT_OUT_OF_SCOPE = "out_of_scope"
 
 INTENT_UNKNOWN = "unknown"
@@ -120,6 +122,7 @@ AGENT_INTENTS = {
     INTENT_GREETING,
     INTENT_CAPABILITIES,
     INTENT_PERSONALIZATION,
+    INTENT_CONVERSATION,
     INTENT_OUT_OF_SCOPE,
     INTENT_UNKNOWN,
 }
@@ -162,6 +165,9 @@ INTENT_TO_ROUTE = {
         ROUTE_STATIC,
 
     INTENT_PERSONALIZATION:
+        ROUTE_STATIC,
+
+    INTENT_CONVERSATION:
         ROUTE_STATIC,
 
     INTENT_OUT_OF_SCOPE:
@@ -1090,6 +1096,10 @@ INTENT_PROTOTYPES = {
         "quelle est la météo à Dakar",
         "quel temps fera-t-il dans cette ville",
         "prévisions météorologiques pour une localité précise",
+        "météo à Dakar demain",
+        "quel temps à Dakar demain",
+        "prévisions pour Dakar demain",
+        "conditions météorologiques dans une ville",
     ],
 
     INTENT_METEO_72H: [
@@ -1143,11 +1153,32 @@ INTENT_PROTOTYPES = {
         "modifier mes préférences MeteoGPT",
     ],
 
+
+    INTENT_CONVERSATION: [
+        "d'accord",
+        "ok merci",
+        "merci beaucoup",
+        "je comprends",
+        "je vois",
+        "très bien",
+        "c'est compris",
+        "je n'ai pas de demande particulière",
+        "je n'ai pas de question pour le moment",
+        "rien pour l'instant",
+    ],
+
     INTENT_OUT_OF_SCOPE: [
         "quel est le prix du Bitcoin",
         "qui a gagné le match",
+        "qui a gagné le match hier",
+        "quel était le score du match hier",
+        "donne-moi le résultat du match de football d'hier",
         "donne-moi une recette de cuisine",
         "parle-moi de football",
+        "explique-moi comment programmer en Python",
+        "aide-moi à écrire du code informatique",
+        "comment créer un programme informatique",
+        "donne-moi des informations qui ne concernent pas la météo",
     ],
 }
 
@@ -1938,6 +1969,7 @@ def mettre_a_jour_contexte_session(
             INTENT_CAPABILITIES,
             INTENT_OUT_OF_SCOPE,
             INTENT_UNKNOWN,
+            INTENT_CONVERSATION,
         }
     ):
 
