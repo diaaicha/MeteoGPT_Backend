@@ -27,7 +27,7 @@ from backend.app.api.routes.whatsapp import (
 
 def create_app() -> FastAPI:
     """
-    Crée et configure l'application FastAPI MeteoGPT.
+    Crée et configure l'application FastAPI XamMeteo.
     """
 
     settings = get_settings()
@@ -37,7 +37,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title=settings.app_name,
         description=(
-            "Backend applicatif de MeteoGPT."
+            "Backend applicatif de XamMeteo."
         ),
         version="0.1.0",
         debug=settings.debug,

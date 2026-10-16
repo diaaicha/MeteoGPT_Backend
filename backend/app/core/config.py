@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     # APPLICATION
     # --------------------------------------------------------
 
-    app_name: str = "MeteoGPT Backend"
+    app_name: str = "XamMeteo Backend"
 
     app_env: Literal[
         "development",
