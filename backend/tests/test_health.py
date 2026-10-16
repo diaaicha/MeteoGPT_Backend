@@ -14,7 +14,7 @@ def test_health_endpoint():
     data = response.json()
 
     assert data["status"] == "ok"
-    assert data["service"] == "MeteoGPT Backend"
+    assert data["service"] == "XamMeteo Backend"
     assert data["environment"] == "development"
 
 
@@ -25,7 +25,7 @@ def test_openapi_available():
 
     data = response.json()
 
-    assert data["info"]["title"] == "MeteoGPT Backend"
+    assert data["info"]["title"] == "XamMeteo Backend"
 
 
 def test_swagger_available():

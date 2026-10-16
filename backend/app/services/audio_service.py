@@ -40,7 +40,7 @@ def _load_transcribe_audio():
 def _load_process_audio_request():
     """
     Charge le pipeline audio complet uniquement lorsqu'une
-    requête audio MeteoGPT doit être traitée.
+    requête audio XamMeteo doit être traitée.
 
     Cela évite de charger E5, Qdrant et le pipeline RAG au
     simple démarrage de FastAPI / Swagger.
@@ -187,7 +187,7 @@ def transcribe_audio_file(
 
 
 # ============================================================
-# AUDIO -> METEOGPT
+# AUDIO -> XamMeteo
 # ============================================================
 
 def process_audio_chat(
@@ -201,7 +201,7 @@ def process_audio_chat(
     audio_output_path=None,
 ) -> AudioChatResponse:
     """
-    Exécute une requête audio MeteoGPT.
+    Exécute une requête audio XamMeteo.
 
     Flux :
         audio
@@ -245,7 +245,7 @@ def process_audio_chat(
             dict,
         ):
             raise RuntimeError(
-                "Le pipeline audio MeteoGPT "
+                "Le pipeline audio XamMeteo "
                 "a retourné un résultat invalide."
             )
 

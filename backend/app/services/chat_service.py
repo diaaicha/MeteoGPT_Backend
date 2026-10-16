@@ -110,7 +110,7 @@ def process_chat(
     user_preferences=None,
 ) -> ChatResponse:
     """
-    Exécute une requête Chat MeteoGPT et transforme la sortie
+    Exécute une requête Chat XamMeteo et transforme la sortie
     interne du pipeline en réponse API.
     """
 
@@ -142,7 +142,7 @@ def process_chat(
             dict
         ):
             raise RuntimeError(
-                "Le pipeline MeteoGPT a retourné "
+                "Le pipeline XamMeteo a retourné "
                 "un résultat invalide."
             )
 

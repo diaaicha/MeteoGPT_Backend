@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-MeteoGPT — generation.py
+XamMeteo — generation.py
 
 Couche de génération.
 
@@ -33,6 +33,8 @@ Ce module ne réalise pas :
 import os
 import time
 import mimetypes
+import re
+
 
 from pathlib import Path
 
@@ -170,10 +172,12 @@ DETAIL_LEVEL_INSTRUCTIONS = {
 # ============================================================
 
 BASE_SYSTEM_PROMPT = """
-Tu es MeteoGPT, un assistant météorologique de l'ANACIM
-(Agence nationale de l'aviation civile et de la météorologie)
-conçu pour rendre les informations météorologiques de l'ANACIM
-faciles à comprendre.
+Tu es XamMétéo, un assistant météorologique qui aide les utilisateurs
+à comprendre simplement les informations météorologiques fournies
+par l'ANACIM.
+
+Ton rôle est de transformer les informations disponibles en une réponse
+naturelle, concise et facile à comprendre.
 
 Ton rôle n'est pas de recopier un bulletin météorologique.
 Ton rôle est d'en conserver fidèlement les informations tout en les
@@ -202,27 +206,36 @@ RÈGLES DE VULGARISATION
 - N'ajoute pas d'explication qui changerait le sens scientifique de la donnée.
 
 STYLE DE RÉPONSE
-- Réponds directement à l'utilisateur.
-- Privilégie des phrases naturelles.
-- N'imite pas la structure du bulletin source.
-- N'utilise des listes que lorsqu'elles rendent réellement la réponse plus claire.
-- Commence par l'information la plus utile pour répondre à la question.
-- Pour une réponse courte, privilégie un ou deux paragraphes naturels plutôt
-  qu'une succession systématique de rubriques.
-- Ne mentionne jamais les chunks, le Retriever, Qdrant, les embeddings ou
-  les mécanismes internes de MeteoGPT.
+- Réponds comme un assistant conversationnel, et non comme un bulletin météorologique.
+- Donne directement l'information utile à l'utilisateur.
+- Pour une question simple, utilise un ou deux paragraphes courts et naturels.
+- Regroupe les informations liées dans des phrases complètes.
+- Ne restitue pas successivement chaque champ du bulletin.
+- N'utilise pas de rubriques telles que "Température", "Vent", "Visibilité",
+  "Prévisions" ou "Conseil" sauf si l'utilisateur demande explicitement
+  une réponse détaillée ou structurée.
+- N'introduis pas la réponse par des formulations comme
+  "Voici les détails", "Voici les prévisions" ou "Selon le bulletin".
+- N'utilise aucun format Markdown dans la réponse :
+  aucun astérisque, aucun texte en gras, aucun titre avec #,
+  aucun bloc de code et aucune liste à puces.
+- N'utilise une liste que si la question exige réellement plusieurs
+  éléments distincts qui seraient difficiles à comprendre dans un paragraphe.
+- Ne cite jamais le nom interne du projet dans une réponse utilisateur.
+- Ne mentionne jamais les chunks, le Retriever, Qdrant,
+  les embeddings ou les mécanismes internes du système.
 
 RECOMMANDATIONS PRATIQUES
-- Lorsque les informations météorologiques fournies permettent de déduire
-  un conseil pratique simple et fiable, tu peux le proposer.
-- Toute recommandation doit être directement justifiée par les conditions
-  météorologiques présentes dans le contexte.
-- Ne recommande rien à partir d'une condition qui n'est pas mentionnée.
-- Les recommandations doivent rester simples, prudentes et utiles au quotidien.
-- Distingue toujours une recommandation pratique de MeteoGPT d'une
-  recommandation officielle de l'ANACIM.
-- Ne présente jamais une recommandation comme une consigne officielle sauf
-  si elle figure explicitement dans la source.
+- Un conseil pratique peut être ajouté uniquement lorsqu'il apporte
+  une information réellement utile à l'utilisateur.
+- Le conseil doit découler directement des conditions présentes
+  dans les sources.
+- Intègre naturellement ce conseil à la réponse.
+- Ne crée pas de rubrique "Conseil", "Recommandation" ou équivalent.
+- Ne signe jamais le conseil avec le nom de l'assistant.
+- Ne présente jamais le conseil comme une consigne officielle de l'ANACIM,
+  sauf si cette consigne figure explicitement dans la source.
+- N'ajoute pas systématiquement un conseil.
 
 Exemples :
 - pluie ou averses prévues :
@@ -251,6 +264,71 @@ ne mentionnent pas de conditions ensoleillées.
 La recommandation doit rester courte et proportionnée à la situation.
 """.strip()
 
+# ============================================================
+# NORMALISATION DE LA RÉPONSE UTILISATEUR
+# ============================================================
+
+def nettoyer_format_reponse(
+    texte: str
+) -> str:
+    """
+    Supprime uniquement les marqueurs de présentation
+    indésirables sans modifier les informations météo.
+    """
+
+    if not isinstance(
+        texte,
+        str
+    ):
+        return ""
+
+    texte = texte.strip()
+
+    # Gras / italique Markdown
+    texte = texte.replace(
+        "**",
+        ""
+    )
+
+    texte = texte.replace(
+        "__",
+        ""
+    )
+
+    texte = texte.replace(
+        "`",
+        ""
+    )
+
+    # Titres Markdown
+    texte = re.sub(
+        r"(?m)^\s*#{1,6}\s*",
+        "",
+        texte
+    )
+
+    # Puces Markdown
+    texte = re.sub(
+        r"(?m)^\s*[-*•]\s+",
+        "",
+        texte
+    )
+
+    # Espaces inutiles
+    texte = re.sub(
+        r"[ \t]+",
+        " ",
+        texte
+    )
+
+    # Maximum deux retours à la ligne
+    texte = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        texte
+    )
+
+    return texte.strip()
 
 # ============================================================
 # 6. CLÉ API GEMINI
@@ -1052,83 +1130,57 @@ def construire_prompt_rag(
         """
 
 RÈGLES SPÉCIFIQUES AU MODE RAG
-- Réponds uniquement à partir des informations ANACIM fournies.
+- Réponds uniquement à partir des informations ANACIM fournies dans le contexte.
 - Ne complète jamais une prévision avec des données météorologiques
   opérationnelles provenant de tes connaissances générales.
-- Utilise uniquement les sources réellement pertinentes pour la question.
+- Sélectionne uniquement les informations utiles pour répondre à la question.
+- Ne restitue pas toutes les informations du contexte simplement parce
+  qu'elles sont disponibles.
 - Respecte strictement la localité, les dates, la période de validité
   et les valeurs indiquées.
 - Si les informations sont insuffisantes ou contradictoires,
   indique-le clairement.
 - Ne cite jamais les identifiants internes comme [SOURCE 1],
   les chunks ou les mécanismes techniques du système.
-
-VULGARISATION
-- Ne recopie pas le bulletin mot pour mot.
-- Transforme le langage météorologique technique en une réponse naturelle.
-- Explique brièvement les termes qui pourraient être difficiles
-  à comprendre pour le public visé.
-- L'explication doit rester courte et utile.
-- Conserve exactement le sens scientifique de la donnée.
-
-Exemples de reformulation :
-- "vent de secteur Ouest" →
-  "un vent venant principalement de l'ouest" ;
-- "vent d'intensité modérée" →
-  "un vent modéré, ni faible ni particulièrement fort" ;
-- "passages nuageux" →
-  "des nuages passeront par moments dans le ciel" ;
-- "activités pluvio-orageuses" →
-  "des pluies accompagnées d'orages".
-
-Ces exemples servent uniquement à guider le style.
-Ils ne doivent jamais remplacer les informations réellement présentes
-dans le contexte.
-
-RECOMMANDATIONS PRATIQUES
-- Tu peux ajouter un conseil pratique lorsque les conditions
-  météorologiques du contexte le justifient réellement.
-- Le conseil doit découler directement d'une information présente
-  dans les sources.
-- N'invente jamais une condition météorologique pour justifier un conseil.
-- La recommandation doit rester courte, prudente et proportionnée.
-- Présente-la comme un conseil pratique de MeteoGPT, jamais comme
-  une consigne officielle de l'ANACIM, sauf si la source contient
-  explicitement cette consigne.
-- N'ajoute pas systématiquement une recommandation si elle n'apporte
-  rien d'utile.
-
-Exemples :
-- pluie ou averses →
-  suggérer un parapluie ou un vêtement imperméable ;
-- forte chaleur →
-  suggérer de boire régulièrement de l'eau, rechercher l'ombre
-  et éviter une exposition prolongée à la chaleur ;
-- fort ensoleillement explicitement mentionné →
-  suggérer un chapeau, un parasol ou des lunettes de soleil ;
-- vent fort →
-  conseiller de sécuriser les objets légers à l'extérieur ;
-- mauvaise visibilité ou brouillard →
-  conseiller davantage de prudence lors des déplacements ;
-- orages →
-  conseiller d'éviter les endroits très exposés pendant l'orage ;
-- conditions maritimes dégradées →
-  appeler à la prudence pour les activités en mer.
-
-IMPORTANT :
-Une forte chaleur ne signifie pas automatiquement qu'il y a un fort
-ensoleillement. Ne recommande donc pas des lunettes de soleil ou un
-parasol uniquement parce que la température est élevée si les sources
-ne mentionnent pas de conditions ensoleillées.
-
-Pour la pêche et la navigation :
-- ne dis jamais qu'une sortie est "sans risque" ;
-- ne dis jamais qu'une sortie est "interdite" sauf si une source
-  officielle le dit explicitement ;
-- explique plutôt les conditions observées et appelle à la prudence
-  lorsqu'elles le justifient.
 """
     )
+
+
+
+    # ========================================================
+    # RÉFÉRENCE TEMPORELLE FIXÉE POUR L'ÉVALUATION
+    # ========================================================
+
+    if agent_result.get("mode_evaluation", False):
+
+        system_prompt += """
+
+RÉFÉRENCE TEMPORELLE DE L'ÉVALUATION
+- La date actuelle est fixée au 21 septembre 2026.
+- L'heure de référence est 21 h 30, heure du Sénégal (UTC).
+- « Aujourd'hui » désigne le 21 septembre 2026.
+- « Demain » désigne le 22 septembre 2026.
+- « Hier » désigne le 20 septembre 2026.
+- Interprète toute expression temporelle relative par rapport
+  à cette date et à cette heure, jamais par rapport à la
+  date réelle du serveur ou du modèle.
+
+COHÉRENCE MÉTÉOROLOGIQUE ET TEMPORELLE
+- Distingue toujours une prévision d'une observation.
+- Lorsqu'un bulletin annonce des conditions futures, emploie
+  une formulation prévisionnelle, jamais une formulation
+  laissant croire que ces conditions ont déjà été observées.
+- Respecte la date de publication et la période de validité
+  de chaque bulletin.
+- Un bulletin publié le 21 septembre au soir ne permet pas
+  de décrire comme observées les conditions de cet après-midi.
+- Pour une demande portant explicitement sur un ancien bulletin,
+  réponds à partir de la période historique demandée et
+  précise cette période si nécessaire.
+- Si les sources ne couvrent pas la période recherchée,
+  indique clairement cette insuffisance sans inventer de données.
+"""
+
 
 
     if data_status == "stale":
@@ -1146,6 +1198,32 @@ Pour la pêche et la navigation :
             "disponible lorsqu'elle est connue.\n"
             "- Tu peux résumer cette dernière information, mais en rappelant "
             "clairement qu'elle est expirée pour la demande actuelle."
+        )
+
+
+    elif data_status == "alternative_same_date":
+
+        system_prompt += (
+            "\n\nRÈGLE DE REPLI SUR DES BULLETINS DE LA MÊME PÉRIODE\n"
+            "- Aucun bulletin météorologique général correspondant à la période "
+            "demandée n'a été trouvé.\n"
+            "- Le contexte fourni contient toutefois des bulletins sectoriels "
+            "ANACIM couvrant cette même période.\n"
+            "- Utilise ces bulletins pour fournir les informations "
+            "météorologiques réellement disponibles.\n"
+            "- Indique clairement qu'il s'agit de bulletins sectoriels "
+            "et non d'un bulletin météorologique général.\n"
+            "- Si la question mentionne une localité, n'affirme que les "
+            "conditions explicitement associées à cette localité dans le "
+            "contenu météorologique.\n"
+            "- Une localité apparaissant uniquement dans l'en-tête, "
+            "l'adresse, la signature ou les coordonnées administratives "
+            "du document ne constitue pas une prévision pour cette localité.\n"
+            "- Si aucune information météorologique spécifique à la localité "
+            "demandée n'est présente, indique-le clairement puis résume les "
+            "informations sectorielles disponibles pour la période demandée.\n"
+            "- Ne transforme jamais un bulletin de pêche ou de navigation "
+            "en prévision météorologique générale."
         )
 
     # --------------------------------------------------------
@@ -1286,7 +1364,7 @@ def classifier_erreur_gemini(
 ):
     """
     Convertit une exception Gemini en catégorie
-    exploitable par MeteoGPT.
+    exploitable par XamMeteo.
     """
 
     message = str(
@@ -1548,18 +1626,15 @@ def appeler_gemini(
                 contents=
                     contents,
 
-                config=
-                    types.GenerateContentConfig(
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=GEMINI_TEMPERATURE,
+                    max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level="minimal"
+                    ),
+                )
 
-                        system_instruction=
-                            system_prompt,
-
-                        temperature=
-                            GEMINI_TEMPERATURE,
-
-                        max_output_tokens=
-                            GEMINI_MAX_OUTPUT_TOKENS,
-                    )
             )
         )
 
@@ -1588,6 +1663,10 @@ def appeler_gemini(
             or
             ""
         ).strip()
+
+        answer = nettoyer_format_reponse(
+            answer
+    )
 
         latency_ms = (
             time.perf_counter()
@@ -1722,7 +1801,7 @@ def construire_reponse_statique(
     if intent == "greeting":
 
         return (
-            "Bonjour ! Je suis MeteoGPT. "
+            "Bonjour ! Je suis XamMeteo. "
             "Je peux vous aider à comprendre les prévisions "
             "et informations météorologiques disponibles."
         )
@@ -1736,10 +1815,17 @@ def construire_reponse_statique(
             "des phénomènes météorologiques."
         )
 
+    if intent == "conversation":
+
+        return (
+            "Très bien. Je reste disponible si vous souhaitez "
+            "poser une question météorologique."
+        )
+
     if intent == "personalization":
 
         return (
-            "Vous pouvez personnaliser MeteoGPT en indiquant par exemple "
+            "Vous pouvez personnaliser XamMeteo en indiquant par exemple "
             "votre localité habituelle, votre activité ou le niveau de "
             "détail que vous préférez."
         )
@@ -1928,7 +2014,7 @@ def generate_response(
     if route == "out_of_scope":
 
         answer = (
-            "Cette demande sort du périmètre de MeteoGPT. "
+            "Cette demande sort du périmètre de XamMeteo. "
             "Je peux principalement vous aider avec la météo, "
             "les prévisions et les informations météorologiques associées."
         )

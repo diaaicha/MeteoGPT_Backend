@@ -20,10 +20,14 @@ from backend.app.api.routes.audio import (
     router as audio_router,
 )
 
+from backend.app.api.routes.whatsapp import (
+    router as whatsapp_router,
+)
+
 
 def create_app() -> FastAPI:
     """
-    Crée et configure l'application FastAPI MeteoGPT.
+    Crée et configure l'application FastAPI XamMeteo.
     """
 
     settings = get_settings()
@@ -33,7 +37,7 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title=settings.app_name,
         description=(
-            "Backend applicatif de MeteoGPT."
+            "Backend applicatif de XamMeteo."
         ),
         version="0.1.0",
         debug=settings.debug,
@@ -61,6 +65,10 @@ def create_app() -> FastAPI:
         prefix=settings.api_v1_prefix,
     )
 
+    application.include_router(
+        whatsapp_router,
+        prefix=settings.api_v1_prefix,
+    )
     application.include_router(
         admin_update_router,
         prefix=settings.api_v1_prefix,

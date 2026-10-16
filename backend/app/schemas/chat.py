@@ -9,14 +9,14 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     """
-    Requête textuelle envoyée à MeteoGPT.
+    Requête textuelle envoyée à XamMeteo.
     """
 
     query: str = Field(
         ...,
         min_length=1,
         max_length=2000,
-        description="Question ou message envoyé à MeteoGPT.",
+        description="Question ou message envoyé à XamMeteo.",
     )
 
     thread_id: str | None = Field(
@@ -33,7 +33,7 @@ class ChatRequest(BaseModel):
         default=None,
         description=(
             "Préférences utilisateur facultatives "
-            "transmises à l'Agent MeteoGPT."
+            "transmises à l'Agent XamMeteo."
         ),
     )
 

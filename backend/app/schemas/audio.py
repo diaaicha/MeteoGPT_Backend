@@ -25,7 +25,7 @@ class AudioTranscriptionResponse(BaseModel):
 
 class AudioChatResponse(BaseModel):
     """
-    Réponse publique d'une requête audio MeteoGPT.
+    Réponse publique d'une requête audio XamMeteo.
     """
 
     success: bool

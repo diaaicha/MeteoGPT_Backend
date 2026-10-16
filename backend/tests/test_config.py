@@ -5,13 +5,17 @@ from backend.app.core.config import (
 
 
 def test_default_environment():
-    settings = Settings()
+    settings = Settings(
+        _env_file=None,
+    )
 
     assert settings.app_env == "development"
 
 
 def test_api_prefix():
-    settings = Settings()
+    settings = Settings(
+        _env_file=None,
+    )
 
     assert settings.api_v1_prefix == "/api/v1"
 
@@ -21,18 +25,23 @@ def test_project_root_exists():
 
 
 def test_absolute_data_dir():
-    settings = Settings()
+    settings = Settings(
+        _env_file=None,
+    )
 
     assert settings.absolute_data_dir.is_absolute()
 
 
 def test_absolute_qdrant_path():
-    settings = Settings()
-
+    settings = Settings(
+        _env_file=None,
+)
     assert settings.absolute_qdrant_path.is_absolute()
 
 
 def test_whatsapp_disabled_by_default():
-    settings = Settings()
+    settings = Settings(
+        _env_file=None,
+    )
 
     assert settings.enable_whatsapp is False

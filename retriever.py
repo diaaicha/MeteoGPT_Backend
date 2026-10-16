@@ -1090,7 +1090,7 @@ def resoudre_temporalite(
     )
 
     match_french = re.search(
-        rf"\b(\d{{1,2}})\s+({month_pattern})\s+(\d{{4}})\b",
+        rf"\b(\d{{1,2}})\s+({month_pattern})(?:\s+(\d{{4}}))?\b",
         query_temporal,
     )
 
@@ -1104,8 +1104,10 @@ def resoudre_temporalite(
             match_french.group(2)
         )
 
-        year = int(
-            match_french.group(3)
+        year = (
+            int(match_french.group(3))
+            if match_french.group(3)
+            else now.year
         )
 
         month = (
@@ -1758,6 +1760,12 @@ def selectionner_chunks_admissibles(
             )
         )
 
+
+    # ========================================================
+    # 1. RECHERCHE NORMALE :
+    # catégories correspondant à la requête
+    # ========================================================
+
     categories_autorisees = set(
         contraintes[
             "category"
@@ -1765,10 +1773,6 @@ def selectionner_chunks_admissibles(
             "categories"
         ]
     )
-
-    # ========================================================
-    # 1. FILTRAGE PAR CATEGORIE
-    # ========================================================
 
     chunks_categorie = [
         chunk
@@ -1781,43 +1785,140 @@ def selectionner_chunks_admissibles(
         in categories_autorisees
     ]
 
-    # ========================================================
-    # 2. FILTRAGE GEOGRAPHIQUE
-    # ========================================================
-
-    chunks_geographiques = [
-        chunk
-        for chunk
-        in chunks_categorie
-        if chunk_geographiquement_admissible(
-            chunk,
-            contraintes["location"]
-        )
-    ]
 
     # ========================================================
-    # 3. RECHERCHE STRICTE PAR VALIDITE
+    # 2. FILTRAGE TEMPOREL
     # ========================================================
 
     chunks_temporels = (
         selectionner_chunks_temporels(
-            chunks=chunks_geographiques,
+            chunks=chunks_categorie,
             temporalite=
                 contraintes["temporal"],
             now=now
         )
     )
 
+
+    # ========================================================
+    # 3. FILTRAGE GÉOGRAPHIQUE
+    # ========================================================
+
+    chunks_finaux = [
+        chunk
+        for chunk
+        in chunks_temporels
+        if chunk_geographiquement_admissible(
+            chunk,
+            contraintes["location"]
+        )
+    ]
+
+
+    # ========================================================
+    # 4. FALLBACK MÊME DATE / MÊME PÉRIODE
+    #
+    # Seulement pour une demande météo générale.
+    #
+    # Si aucun bulletin météo général n'est disponible,
+    # on regarde les autres catégories disponibles pour
+    # la même période avant de conclure à une absence.
+    # ========================================================
+
     fallback_used = False
     data_status = "valid"
 
-    chunks_finaux = (
-        chunks_temporels
+    category_mode = (
+        contraintes[
+            "category"
+        ].get(
+            "mode"
+        )
     )
 
+    chunks_alternatifs = []
+
+
+    if (
+        not chunks_finaux
+        and
+        category_mode == "general"
+    ):
+
+        # ----------------------------------------------------
+        # Tous les bulletins couvrant la même période,
+        # quelle que soit leur catégorie
+        # ----------------------------------------------------
+
+        chunks_alternatifs_temporels = (
+            selectionner_chunks_temporels(
+                chunks=BM25_CHUNKS,
+                temporalite=
+                    contraintes["temporal"],
+                now=now
+            )
+        )
+
+
+        # ----------------------------------------------------
+        # On conserve d'abord la contrainte géographique
+        # lorsqu'elle peut être appliquée.
+        #
+        # Pour les catégories sans localité structurée,
+        # chunk_geographiquement_admissible() les conserve.
+        # ----------------------------------------------------
+
+        chunks_alternatifs = [
+            chunk
+            for chunk
+            in chunks_alternatifs_temporels
+            if chunk_geographiquement_admissible(
+                chunk,
+                contraintes["location"]
+            )
+        ]
+
+
+        # ----------------------------------------------------
+        # Si aucune correspondance géographique structurée
+        # n'est disponible, on conserve quand même les
+        # bulletins de la même période.
+        #
+        # Leur pertinence textuelle sera ensuite départagée
+        # par le Retriever.
+        # ----------------------------------------------------
+
+        if not chunks_alternatifs:
+
+            chunks_alternatifs = (
+                chunks_alternatifs_temporels
+            )
+
+
+        if chunks_alternatifs:
+
+            chunks_finaux = (
+                chunks_alternatifs
+            )
+
+            fallback_used = True
+
+            data_status = (
+                "alternative_same_date"
+            )
+
+        else:
+
+            data_status = "unavailable"
+
+
+    elif not chunks_finaux:
+
+        data_status = "unavailable"
+
+
     # ========================================================
-    # 4. FALLBACK :
-    # DERNIERE DONNEE ANACIM DISPONIBLE
+    # 5. FALLBACK VERS UNE AUTRE DATE
     # ========================================================
 
     if not chunks_finaux:
@@ -1825,7 +1926,7 @@ def selectionner_chunks_admissibles(
         chunks_finaux = (
             selectionner_chunks_fallback_expire(
                 chunks=
-                    chunks_geographiques,
+                    chunks_categorie,
                 temporalite=
                     contraintes["temporal"],
                 now=
@@ -1842,8 +1943,10 @@ def selectionner_chunks_admissibles(
 
             data_status = "unavailable"
 
+
+
     # ========================================================
-    # 5. IDENTIFIANTS
+    # 6. IDENTIFIANTS DES CHUNKS ADMISSIBLES
     # ========================================================
 
     chunk_ids = [
@@ -1857,10 +1960,6 @@ def selectionner_chunks_admissibles(
         )
     ]
 
-    # ========================================================
-    # 6. DERNIERE DATE DISPONIBLE
-    # ========================================================
-
     latest_available_until = None
 
     dates_fin = [
@@ -1870,24 +1969,26 @@ def selectionner_chunks_admissibles(
                 "date_fin_validite"
             )
         )
-        for chunk
-        in chunks_finaux
+        for chunk in chunks_finaux
     ]
 
     dates_fin = [
         value
-        for value
-        in dates_fin
+        for value in dates_fin
         if value is not None
     ]
 
     if dates_fin:
-
         latest_available_until = (
             max(
                 dates_fin
             ).isoformat()
         )
+
+
+    # ========================================================
+    # 7. RÉSULTAT
+    # ========================================================
 
     return {
         "query":
@@ -1895,15 +1996,6 @@ def selectionner_chunks_admissibles(
 
         "constraints":
             contraintes,
-
-        "data_status":
-            data_status,
-
-        "fallback_used":
-            fallback_used,
-
-        "latest_available_until":
-            latest_available_until,
 
         "counts": {
             "initial":
@@ -1914,14 +2006,25 @@ def selectionner_chunks_admissibles(
                     chunks_categorie
                 ),
 
-            "after_geography":
-                len(
-                    chunks_geographiques
-                ),
-
             "after_temporal":
                 len(
                     chunks_temporels
+                ),
+
+            "after_geography":
+                len([
+                    chunk
+                    for chunk
+                    in chunks_temporels
+                    if chunk_geographiquement_admissible(
+                        chunk,
+                        contraintes["location"]
+                    )
+                ]),
+
+            "alternative_same_date":
+                len(
+                    chunks_alternatifs
                 ),
 
             "final":
@@ -1930,12 +2033,21 @@ def selectionner_chunks_admissibles(
                 ),
         },
 
+        "data_status":
+            data_status,
+
+        "fallback_used":
+            fallback_used,
+
         "chunks":
             chunks_finaux,
 
         "chunk_ids":
             chunk_ids,
+        "latest_available_until":
+            latest_available_until,
     }
+
 # ============================================================
 # 14. DENSE FILTRÉ
 # ============================================================
