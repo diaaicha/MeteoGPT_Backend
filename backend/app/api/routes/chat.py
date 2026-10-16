@@ -23,13 +23,13 @@ router = APIRouter(
 @router.post(
     "",
     response_model=ChatResponse,
-    summary="Envoyer un message à MeteoGPT",
+    summary="Envoyer un message à XamMeteo",
 )
 def chat(
     payload: ChatRequest
 ) -> ChatResponse:
     """
-    Traite une requête textuelle MeteoGPT.
+    Traite une requête textuelle XamMeteo.
 
     L'endpoint transmet la requête au pipeline RAG
     puis retourne une réponse publique simplifiée.

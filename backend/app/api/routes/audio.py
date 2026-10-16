@@ -116,7 +116,7 @@ async def transcribe_audio(
 @router.post(
     "/chat",
     response_model=AudioChatResponse,
-    summary="Interroger MeteoGPT avec un fichier audio",
+    summary="Interroger XamMeteo avec un fichier audio",
 )
 async def audio_chat(
     file: UploadFile = File(...),
@@ -124,7 +124,7 @@ async def audio_chat(
 ) -> AudioChatResponse:
     """
     Reçoit une question vocale et retourne la réponse
-    textuelle de MeteoGPT.
+    textuelle de XamMeteo.
 
     Flux :
         audio
