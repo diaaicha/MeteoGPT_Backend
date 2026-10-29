@@ -577,6 +577,7 @@ Lorsqu'une phase est entièrement validée :
 | Activer `.venv` | `.\.venv\Scripts\Activate.ps1` |
 | Vérifier Python | `python --version` |
 | Démarrer FastAPI | `python -m uvicorn backend.app.main:app --reload` |
+| Demarrer cloudflare | `cloudflared tunnel --url http://localhost:8000` |
 | Arrêter FastAPI | `Ctrl + C` |
 | Tous les tests | `pytest backend/tests -v` |
 | Tests rapides | `pytest backend/tests -q` |

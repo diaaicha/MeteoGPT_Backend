@@ -702,6 +702,7 @@ PATTERNS_CONCEPTS_METEO = [
     r"\bpoint\s+de\s+rosee\b",
 
     r"\bconvection\b",
+    r"\bpoussiere\b"
 ]
 
 
@@ -1090,6 +1091,11 @@ INTENT_PROTOTYPES = {
         "quelle est la météo aujourd'hui",
         "quel temps fera-t-il",
         "est-ce qu'il va pleuvoir",
+        "prévisions météorologiques pour aujourd'hui",
+        "conditions météorologiques actuelles",
+        "est-ce qu'il va faire chaud aujourd'hui",
+        "est-ce qu'il va faire froid aujourd'hui",
+        "va -t-il y avoir du vent aujourd'hui",
     ],
 
     INTENT_METEO_LOCALE: [
@@ -1100,28 +1106,63 @@ INTENT_PROTOTYPES = {
         "quel temps à Dakar demain",
         "prévisions pour Dakar demain",
         "conditions météorologiques dans une ville",
+        "meteo à Thiès",
+        "meteo à Saint-Louis",
+
     ],
 
     INTENT_METEO_72H: [
         "prévisions météorologiques pour les trois prochains jours",
         "météo pour les prochaines 72 heures",
+        "quel temps fera-t-il dans les trois prochains jours",
+        "prévisions pour les trois prochains jours",
+        "météo sur 72 heures",
+        "meteo au cours des trois prochains jours",
+        "meteo sur trois jours",
+        "meteo 72h",
+        "meteo horizont 72h",
     ],
 
     INTENT_MARINE_NATIONALE: [
         "donne-moi le bulletin marine nationale",
         "quelle est la météo marine nationale",
         "prévisions du bulletin marine nationale",
+        "conditions maritimes selon la marine nationale",
+        "prévisions météorologiques pour la marine nationale",
+        "bulletin météo de la marine nationale",
+        "prévisions maritimes de la marine nationale",
+        "MARINE NATIONALE",
+        "marine nationale",
+        "bulletin marine nationale du jour",
+        "prévisions marine nationale",
+        "prevision maritime"
+
     ],
 
     INTENT_NAVIGATION_COTIERE: [
         "quel est l'état de la mer",
         "quelle est la houle pour la navigation côtière",
         "conditions maritimes pour naviguer",
+        "prévisions pour la navigation côtière",
+        "météo pour les navigateurs côtiers",
+        "conditions de navigation pour les plaisanciers",
+        "prévisions météorologiques pour la navigation côtière",
+        "navigation côtière",
+        "conditions de navigation"
+        "nav cotiere",
+        "condition de navigation du jour",
     ],
 
     INTENT_PECHE_ARTISANALE: [
         "quelles sont les conditions pour les pêcheurs artisanaux",
         "conditions météo pour aller pêcher",
+        "prévisions pour la pêche artisanale",
+        "météo pour les pêcheurs",
+        "conditions de pêche pour les artisans",
+        "prévisions météorologiques pour la pêche artisanale",
+        "peche artisanale",
+        "conditions de pêche",
+
     ],
 
     INTENT_HISTORIQUE: [
@@ -1134,23 +1175,84 @@ INTENT_PROTOTYPES = {
         "expliquer un phénomène météorologique",
         "comment fonctionne un phénomène climatique",
         "pourquoi l'air chaud contient davantage de vapeur d'eau",
+        "quelle est la différence entre un anticyclone et une dépression",
+        "qu'est-ce qu'un front froid",
+        "qu'est-ce qu'un front chaud",
+        "qu'appelle-t-on un cyclone",
+        "qu'appelle-t-on un ouragan",
+        "qu'appelle-t-on une tornade",
+        "c'est quoi la convection atmosphérique",
+        "defimition de la mousson",
+        "definir l'harmattan",
     ],
 
     INTENT_GREETING: [
         "bonjour",
         "salut",
+        "coucou",
+        "bonsoir",
+        "hello",
+        "hi",
+        "hey",
+        "salam",
+        "salam aleikoum",
+        "assalamou aleikoum",
+        "cc",
+        "yo",
+        "comment ça va",
+        "ça va",
+        "ça va bien",
+        "comment vas-tu",
+        "comment allez-vous",
+        "mon ami",
+        "ma chère",
+        "mon cher",
     ],
 
     INTENT_CAPABILITIES: [
         "que peux-tu faire",
         "quels services peux-tu me rendre",
         "quelles sont les fonctionnalités de MeteoGPT",
+        "quelles sont tes fonctionnalités",
+        "quelles sont vos fonctionnalités",
+        "comment peux-tu m'aider",
+        "comment pouvez-vous m'aider",
+        "à quoi sers-tu",
+        "à quoi sert XamMeteo",
+        "présente-toi",
+        "présentez-vous",
+        "qui es-tu",
+        "qui êtes-vous",
+        "qu'est-ce que tu sais faire",
+        "qu'est-ce que vous savez faire",
+        "quel est ton rôle",
+        "aide-moi à comprendre ce que tu peux faire",
+        "explique-moi tes capacités",
+        "explique-moi ce que tu sais faire",
+        "donne-moi un aperçu de tes fonctionnalités",
+        "quelles sont tes compétences",
+        "donne-moi un résumé de tes capacités",
+        "donne moi ton rôle",
+        "ton role",
     ],
 
     INTENT_PERSONALIZATION: [
         "je veux personnaliser mes prévisions",
         "adapter les prévisions à ma ville",
-        "modifier mes préférences MeteoGPT",
+        "modifier mes préférences XamMeteo",
+        "changer mes préférences de localisation",
+        "mettre à jour mes préférences de météo",
+        "personnaliser les prévisions pour ma région",
+        "je veux définir ma localité par défaut",
+        "je veux définir ma ville par défaut",
+        "je veux définir ma localité préférée",
+        "je veux définir ma ville préférée",
+        "comment puis-je personnaliser mes prévisions",
+        "comment puis-je adapter les prévisions à ma ville",
+        "comment puis-je modifier mes préférences XamMeteo",
+        "comment puis-je changer mes préférences de localisation",
+        "personnalise mon expérience météo",
+        "je veux adapter les prévisions à mes besoins",
     ],
 
 
@@ -1165,6 +1267,18 @@ INTENT_PROTOTYPES = {
         "je n'ai pas de demande particulière",
         "je n'ai pas de question pour le moment",
         "rien pour l'instant",
+        "je n'ai pas besoin d'aide pour le moment",
+        "c'est bon pour l'instant",
+        "c'est tout pour le moment",
+        "c'est tout ce que j'avais à demander",
+        "c'est gentil de votre part",
+        "merci pour votre aide",
+        "merci pour les informations",
+        "ok",
+        "merci",
+
+
+
     ],
 
     INTENT_OUT_OF_SCOPE: [
@@ -1357,6 +1471,7 @@ def classifier_requete_fallback(
     """
     Retourne une décision Agent uniquement si la
     classification E5 est suffisamment fiable.
+
     """
 
     resultat = (
@@ -1469,7 +1584,7 @@ USER_TYPES = {
 # Cette valeur est conservée telle qu'elle existe dans
 # la version actuellement validée du notebook.
 AUTHORITY_SUBTYPES = {
-    "administrite",
+    "administration",
     "collectivite_locale",
     "protection_civile",
     "gestion_crise",
@@ -1570,6 +1685,22 @@ def est_requete_de_suivi(
         r"\bici\b",
         r"\bchez moi\b",
         r"\bdans ma zone\b",
+        r"\bdans ma region\b",
+        r"\bdans ma ville\b",
+        r"\bdans ma localite\b",
+        r"\bdans ma commune\b",
+        r"\bdans ma prefecture\b",
+        r"\bdans ma region\b",
+        r"\bdans ma zone\b",
+        r"\bdans l'apres midi\b",
+        r"\bdans la soiree\b",
+        r"\bdans la nuit\b",
+        r"\bdans la matinee\b",
+        r"\bdans une heure\b",
+        r"\bdans deux heures\b",
+        r"\bdans trois heures\b",
+        r"\bdans trois jours\b",
+
     ]
 
     return any(
@@ -1630,7 +1761,7 @@ def enrichir_requete_contexte(
     if not query:
 
         raise ValueError(
-            "query ne peut pas être vide."
+            "query ne doit pas être vide."
         )
 
     effective_query = query
@@ -1774,8 +1905,11 @@ def enrichir_requete_contexte(
         r"\bmaritime\b",
         r"\bmer\b",
         r"\bhoule\b",
-    ]
+        r"\bvent\b",
+        r"\baviation\b",
+        r"\baeronautique\b",
 
+    ]
     contient_metier_explicite = any(
 
         re.search(
@@ -2134,6 +2268,7 @@ def detecter_besoin_visuel(
 VISUAL_SOURCE_INTENTS = {
     INTENT_NAVIGATION_COTIERE,
     INTENT_PECHE_ARTISANALE,
+    INTENT_MARINE_NATIONALE,
 }
 
 

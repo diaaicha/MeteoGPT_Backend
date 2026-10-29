@@ -417,62 +417,91 @@ def stable_uuid(value: str) -> str:
 # FUSION INCRÉMENTALE DES JSON GLOBAUX
 # ============================================================
 
+
+
 def merge_units_by_source_file(
     existing_units: List[Dict[str, Any]],
-    new_units: List[Dict[str, Any]]
+    new_units: List[Dict[str, Any]],
+    source_files_to_replace: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Fusionne les nouvelles unités avec les unités existantes.
+    Fusion incrémentale par document source.
 
-    Règle :
-    - les unités des documents nouvellement traités remplacent
-      les anciennes unités du même document ;
-    - les autres unités sont conservées.
+    Conserve les documents non concernés et remplace
+    les unités des documents retraités, même si la
+    nouvelle liste d'unités est vide.
     """
 
-    new_keys = set()
+    replaced_keys = set()
 
     for unit in new_units:
-
-        source_file = get_source_file(
-            unit
-        )
-
         key = normalize_source_file(
-            source_file
+            get_source_file(unit)
         )
 
         if key:
+            replaced_keys.add(key)
 
-            new_keys.add(
-                key
-            )
+    for source_file in source_files_to_replace or []:
+        key = normalize_source_file(source_file)
 
-    cleaned_existing = []
+        if key:
+            replaced_keys.add(key)
 
-    for unit in existing_units:
-
-        source_file = get_source_file(
-            unit
-        )
-
-        key = normalize_source_file(
-            source_file
-        )
-
-        if key not in new_keys:
-
-            cleaned_existing.append(
-                unit
-            )
+    cleaned_existing = [
+        unit
+        for unit in existing_units
+        if normalize_source_file(
+            get_source_file(unit)
+        ) not in replaced_keys
+    ]
 
     return cleaned_existing + new_units
+
+
 
 
 def update_global_json_file(
     file_path: Path,
     new_units: List[Dict[str, Any]],
-    possible_keys: Optional[List[str]] = None
+    possible_keys: Optional[List[str]] = None,
+    source_files_to_replace: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Met à jour un JSON global en préservant les unités
+    non concernées par le retraitement.
+    """
+
+    existing_json = load_json(
+        file_path,
+        default=[],
+    )
+
+    existing_units = ensure_list(
+        existing_json,
+        possible_keys=possible_keys,
+    )
+
+    merged_units = merge_units_by_source_file(
+        existing_units,
+        new_units,
+        source_files_to_replace=source_files_to_replace,
+    )
+
+    save_json(
+        merged_units,
+        file_path,
+    )
+
+    return merged_units
+
+
+
+def update_global_json_file(
+    file_path: Path,
+    new_units: List[Dict[str, Any]],
+    possible_keys: Optional[List[str]] = None,
+    source_files_to_replace: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Met à jour un JSON global avec les unités nouvellement produites.
@@ -490,7 +519,8 @@ def update_global_json_file(
 
     merged_units = merge_units_by_source_file(
         existing_units,
-        new_units
+        new_units,
+        source_files_to_replace=source_files_to_replace,
     )
 
     save_json(
@@ -1643,126 +1673,133 @@ def construire_text_units_api(
     return text_units
 
 
+
 def construire_visual_units_api(
     pdf_paths: List[Path],
-    config: MeteoGPTApiConfig
+    config: MeteoGPTApiConfig,
 ) -> List[Dict[str, Any]]:
     """
-    Construit ou récupère les VisualUnits associées aux documents API.
+    Construit les VisualUnits des PDF API à traiter.
 
-    Dans cette version exportable, la fonction récupère les VisualUnits
-    déjà existantes dans visual_units_api.json lorsqu'elles correspondent
-    aux PDF traités.
+    Météo matin / Météo soir :
+        extraction des panneaux du PDF courant.
 
-    Si aucun VisualUnit n'existe pour un nouveau PDF, la fonction retourne
-    une liste vide pour ce document. Le PageImageUnit garde alors la
-    traçabilité multimodale complète.
+    Autres catégories :
+        comportement existant de réutilisation.
+
+    Ne modifie pas directement les JSON globaux.
     """
-
-    source_files = {
-        Path(
-            pdf_path
-        ).name
-        for pdf_path in pdf_paths
-    }
-
-    if not config.visual_units_file.exists():
-
-        return []
 
     visual_json = load_json(
         config.visual_units_file,
-        default=[]
+        default=[],
     )
 
-    visual_units_globales = ensure_list(
+    visual_units_existantes = ensure_list(
         visual_json,
         possible_keys=[
             "visual_units",
+            "items",
             "units",
             "data",
-            "documents"
-        ]
+            "documents",
+        ],
     )
 
-    visual_units_filtrees = []
+    repertoire_images = (
+        config.extracted_api_dir / "visuals"
+    )
 
-    for unit in visual_units_globales:
+    visual_units_nouvelles = []
 
-        if not isinstance(
-            unit,
-            dict
-        ):
+    for pdf_path in pdf_paths:
+        pdf_path = Path(pdf_path)
 
-            continue
+        if not pdf_path.is_file():
+            raise FileNotFoundError(
+                f"PDF API introuvable : {pdf_path}"
+            )
 
-        source_file = get_source_file(
-            unit
+        source_file = pdf_path.name
+
+        infos_doc = inferer_categorie_document_api(
+            source_file
         )
 
-        if source_file in source_files:
+        category = infos_doc["category"]
+        document_type = infos_doc["document_type"]
 
-            infos_doc = inferer_categorie_document_api(
+        infos_temps = inferer_validite_api(
+            source_file,
+            category,
+        )
+
+        if category in {"meteo_matin", "meteo_soir"}:
+            # Import différé pour ne charger l'extraction
+            # OCR que sur les catégories concernées.
+            from src.visual_panel_extraction import (
+                extraire_visual_units_pdf,
+            )
+
+            visual_units_pdf = extraire_visual_units_pdf(
+                pdf_path,
+                repertoire_images,
+            )
+
+        else:
+            # Aucun changement de traitement des
+            # autres catégories pendant ce lot.
+            source_key = normalize_source_file(
                 source_file
             )
 
-            category = infos_doc[
-                "category"
+            visual_units_pdf = [
+                dict(unit)
+                for unit in visual_units_existantes
+                if (
+                    isinstance(unit, dict)
+                    and normalize_source_file(
+                        get_source_file(unit)
+                    ) == source_key
+                )
             ]
 
-            document_type = infos_doc[
-                "document_type"
-            ]
+        for unit in visual_units_pdf:
+            if not isinstance(unit, dict):
+                raise TypeError(
+                    "VisualUnit invalide pour "
+                    f"{source_file}"
+                )
 
-            infos_temps = inferer_validite_api(
-                source_file,
-                category
-            )
+            unit_enrichie = dict(unit)
 
-            unit_enrichie = dict(
-                unit
-            )
+            unit_enrichie.update({
+                "source_file": source_file,
+                "category": category,
+                "document_type": document_type,
+                "date_publication": infos_temps.get(
+                    "date_publication"
+                ),
+                "date_debut_validite": infos_temps.get(
+                    "date_debut_validite"
+                ),
+                "date_fin_validite": infos_temps.get(
+                    "date_fin_validite"
+                ),
+            })
 
-            unit_enrichie[
-                "source_file"
-            ] = source_file
-
-            unit_enrichie[
-                "category"
-            ] = category
-
-            unit_enrichie[
-                "document_type"
-            ] = document_type
-
-            unit_enrichie[
-                "date_publication"
-            ] = infos_temps.get(
-                "date_publication"
-            )
-
-            unit_enrichie[
-                "date_debut_validite"
-            ] = infos_temps.get(
-                "date_debut_validite"
-            )
-
-            unit_enrichie[
-                "date_fin_validite"
-            ] = infos_temps.get(
-                "date_fin_validite"
-            )
-
-            visual_units_filtrees.append(
+            visual_units_nouvelles.append(
                 unit_enrichie
             )
 
-    return visual_units_filtrees
+    return visual_units_nouvelles
+
 
 
 def construire_page_image_units_api(
     pdf_paths: List[Path],
-    config: MeteoGPTApiConfig
+    config: MeteoGPTApiConfig,
+    visual_units: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Construit les PageImageUnits pour les nouveaux documents API.
@@ -1797,10 +1834,40 @@ def construire_page_image_units_api(
     # Index des VisualUnits existantes par document/page
     # --------------------------------------------------------
 
-    visual_units = construire_visual_units_api(
-        pdf_paths,
-        config
-    )
+# Réutilise les VisualUnits déjà construites.
+# Un appel autonome consulte le JSON existant
+# sans déclencher une nouvelle extraction OCR.
+
+    if visual_units is None:
+        visual_json = load_json(
+            config.visual_units_file,
+            default=[],
+        )
+
+        source_keys = {
+            normalize_source_file(Path(path).name)
+            for path in pdf_paths
+        }
+
+        visual_units = [
+            unit
+            for unit in ensure_list(
+                visual_json,
+                possible_keys=[
+                    "visual_units",
+                    "items",
+                    "units",
+                    "data",
+                    "documents",
+                ],
+            )
+            if (
+                isinstance(unit, dict)
+                and normalize_source_file(
+                    get_source_file(unit)
+                ) in source_keys
+            )
+        ]
 
     panels_by_document_page = {}
 
@@ -4833,7 +4900,8 @@ def update_api_pipeline(
 
         new_page_image_units = construire_page_image_units_api(
             pdf_paths,
-            config
+            config,
+            visual_units=new_visual_units,
         )
 
         result["counts"]["new_text_units"] = len(
@@ -4914,8 +4982,12 @@ def update_api_pipeline(
                 "visual_units",
                 "items",
                 "units",
-                "data"
-            ]
+                "data",
+            ],
+            source_files_to_replace=[
+                Path(path).name
+                for path in pdf_paths
+            ],
         )
 
         all_page_image_units = update_global_json_file(

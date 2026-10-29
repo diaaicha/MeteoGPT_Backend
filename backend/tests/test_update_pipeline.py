@@ -410,7 +410,8 @@ def test_update_pipeline_preserves_modified_source_for_qdrant(
     monkeypatch.setattr(
         pipeline,
         "update_global_json_file",
-        lambda path, new_items, possible_keys:
+        lambda path, new_items, possible_keys=None,
+            source_files_to_replace=None:
             list(new_items),
     )
 

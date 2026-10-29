@@ -88,20 +88,32 @@ CATEGORIES_LOCALITE_STRUCTUREE = set()
 
 FRENCH_MONTHS = {
     "janvier": 1,
+    "jan": 1,
+    "janv": 1,
     "fevrier": 2,
     "février": 2,
+    "fev": 2,
+    "fevr": 2,
     "mars": 3,
     "avril": 4,
     "mai": 5,
     "juin": 6,
     "juillet": 7,
+    "jull": 7,
     "aout": 8,
+    "out": 8,
     "août": 8,
     "septembre": 9,
+    "sept": 9,
+    "sep": 9,
     "octobre": 10,
+    "oct": 10,
     "novembre": 11,
+    "nov": 11,
     "decembre": 12,
     "décembre": 12,
+    "dec": 12,
+
 }
 
 
@@ -530,11 +542,6 @@ def encoder_requete(
         )
     )
 
-
-# ============================================================
-# 7. QDRANT
-# ============================================================
-
 # ============================================================
 # 7. QDRANT
 # ============================================================
@@ -621,6 +628,7 @@ atexit.register(
 # 8. DÉTECTION DE LA CATÉGORIE
 # ============================================================
 
+
 def detecter_categories_requete(query):
 
     query_norm = (
@@ -629,13 +637,20 @@ def detecter_categories_requete(query):
     )
 
     # --------------------------------------------------------
-    # PÊCHE ARTISANALE
+    # 1. PÊCHE ARTISANALE
     # --------------------------------------------------------
 
     peche_patterns = [
         r"\bpeche artisanale\b",
         r"\bpecheurs?\b",
         r"\bpirogues?\b",
+
+        # Variantes supplémentaires
+        r"\bpecheuses?\b",
+        r"\bpeche\b",
+        r"\bpecher\b",
+        r"\bpechant\b",
+        r"\bfilets?\s+de\s+peche\b",
     ]
 
     if any(
@@ -644,13 +659,11 @@ def detecter_categories_requete(query):
     ):
         return {
             "mode": "explicit",
-            "categories": [
-                "peche_artisanale"
-            ],
+            "categories": ["peche_artisanale"],
         }
 
     # --------------------------------------------------------
-    # MARINE NATIONALE
+    # 2. MARINE NATIONALE
     # --------------------------------------------------------
 
     marine_nationale_patterns = [
@@ -658,30 +671,34 @@ def detecter_categories_requete(query):
         r"\bbulletin marine national(?:e)?\b",
         r"\bmeteo marine nationale\b",
         r"\bmeteorologie marine nationale\b",
+
+        # Variantes supplémentaires
+        r"\bforces navales\b",
+        r"\bnavires? militaires?\b",
+        r"\bbatiments?\s+de\s+guerre\b",
     ]
 
     if any(
-        re.search(
-            pattern,
-            query_norm
-        )
-        for pattern
-        in marine_nationale_patterns
+        re.search(pattern, query_norm)
+        for pattern in marine_nationale_patterns
     ):
         return {
             "mode": "explicit",
-            "categories": [
-                "marine_nationale"
-            ],
+            "categories": ["marine_nationale"],
         }
 
     # --------------------------------------------------------
-    # NAVIGATION CÔTIÈRE
+    # 3. NAVIGATION CÔTIÈRE
     # --------------------------------------------------------
 
     navigation_patterns = [
         r"\bnavigation cotiere\b",
         r"\bnavigation\b",
+
+        # Variantes supplémentaires
+        r"\bnavigu(?:er|e|es|ent|ons|ez)\b",
+        r"\bcabotage\b",
+        r"\b(?:traversee|trajet)\s+(?:maritime|en mer)\b",
     ]
 
     if any(
@@ -690,13 +707,11 @@ def detecter_categories_requete(query):
     ):
         return {
             "mode": "explicit",
-            "categories": [
-                "navigation_cotiere"
-            ],
+            "categories": ["navigation_cotiere"],
         }
 
     # --------------------------------------------------------
-    # MÉTÉO MARITIME GÉNÉRALE
+    # 4. MÉTÉO MARITIME GÉNÉRALE
     # --------------------------------------------------------
 
     maritime_patterns = [
@@ -705,6 +720,14 @@ def detecter_categories_requete(query):
         r"\betat de la mer\b",
         r"\bmaritime\b",
         r"\ben mer\b",
+
+        # Variantes supplémentaires ciblées
+        r"\bhoules\b",
+        r"\bmaritimes\b",
+        r"\bmarees?\b",
+        r"\bmer\s+(?:agitee|calme|forte|demontee)\b",
+        r"\bhauteur\s+(?:des?\s+)?vagues?\b",
+        r"\bvagues?\s+(?:en mer|au large)\b",
     ]
 
     if any(
@@ -720,13 +743,17 @@ def detecter_categories_requete(query):
         }
 
     # --------------------------------------------------------
-    # PRÉVISIONS 72 H
+    # 5. PRÉVISIONS 72 HEURES
     # --------------------------------------------------------
 
     patterns_72h = [
         r"\b72\s*h\b",
         r"\b72\s*(?:prochaines?\s+)?heures?\b",
         r"\b(?:3|trois)\s+(?:prochains?\s+)?jours?\b",
+
+        # Variantes supplémentaires
+        r"\b72\s*hrs?\b",
+        r"\b72\s*heur\b",
     ]
 
     if any(
@@ -735,57 +762,59 @@ def detecter_categories_requete(query):
     ):
         return {
             "mode": "explicit",
-            "categories": [
-                "meteo_72h"
-            ],
+            "categories": ["meteo_72h"],
         }
 
     # --------------------------------------------------------
-    # BULLETIN MATIN
+    # 6. BULLETIN MATIN
     # --------------------------------------------------------
 
-    if (
-        re.search(
-            r"\bbulletin du matin\b",
-            query_norm,
-        )
-        or
-        re.search(
-            r"\bmeteo du matin\b",
-            query_norm,
-        )
+    matin_patterns = [
+        r"\bbulletin du matin\b",
+        r"\bmeteo du matin\b",
+
+        # Variantes supplémentaires
+        r"\b(?:bulletin|meteo|previsions?)\s+(?:du\s+)?matin\b",
+        r"\bbulletin\s+meteo\s+(?:du\s+)?matin\b",
+        r"\bbulletin\s+matinal\b",
+        r"\bprevisions?\s+matinales?\b",
+    ]
+
+    if any(
+        re.search(pattern, query_norm)
+        for pattern in matin_patterns
     ):
         return {
             "mode": "explicit",
-            "categories": [
-                "meteo_matin"
-            ],
+            "categories": ["meteo_matin"],
         }
 
     # --------------------------------------------------------
-    # BULLETIN SOIR
+    # 7. BULLETIN SOIR
     # --------------------------------------------------------
 
-    if (
-        re.search(
-            r"\bbulletin du soir\b",
-            query_norm,
-        )
-        or
-        re.search(
-            r"\bmeteo du soir\b",
-            query_norm,
-        )
+    soir_patterns = [
+        r"\bbulletin du soir\b",
+        r"\bmeteo du soir\b",
+
+        # Variantes supplémentaires
+        r"\b(?:bulletin|meteo|previsions?)\s+(?:du\s+)?soir\b",
+        r"\bbulletin\s+meteo\s+(?:du\s+)?soir\b",
+        r"\bbulletin\s+vesperal\b",
+        r"\bprevisions?\s+(?:de\s+la\s+)?soiree\b",
+    ]
+
+    if any(
+        re.search(pattern, query_norm)
+        for pattern in soir_patterns
     ):
         return {
             "mode": "explicit",
-            "categories": [
-                "meteo_soir"
-            ],
+            "categories": ["meteo_soir"],
         }
 
     # --------------------------------------------------------
-    # MÉTÉO GÉNÉRALE
+    # 8. MÉTÉO GÉNÉRALE
     # --------------------------------------------------------
 
     return {
@@ -796,6 +825,7 @@ def detecter_categories_requete(query):
             "meteo_72h",
         ],
     }
+
 
 # ============================================================
 # 9. DÉTECTION DE LA LOCALITÉ
@@ -877,120 +907,249 @@ def construire_periode_jour(
     return start, end
 
 
-def resoudre_temporalite(
-    query,
-    now=None
-):
+def _extraire_date_explicite(query_temporal, now, raw_query=None):
+    """Extrait une date numérique ou une date française."""
 
-    if now is None:
-        now = datetime.now(
-            METEOGPT_TIMEZONE
-        )
-
-    query_norm = (
-        normaliser_valeur_metadata(query)
-        or ""
+    match_numeric = re.search(
+        r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b",
+        str(raw_query or query_temporal),
     )
 
-    query_temporal = (
+    if match_numeric:
+        jour, mois, annee = map(int, match_numeric.groups())
+        cible = date(annee, mois, jour)
+        return cible, match_numeric.group(0)
+
+    noms_mois = "|".join(
+        re.escape(nom)
+        for nom in sorted(FRENCH_MONTHS, key=len, reverse=True)
+    )
+
+    match_fr = re.search(
+        rf"\b(\d{{1,2}})\s+({noms_mois})(?:\s+(\d{{4}}))?\b",
+        query_temporal,
+    )
+
+    if not match_fr:
+        return None
+
+    jour = int(match_fr.group(1))
+    mois = FRENCH_MONTHS[match_fr.group(2)]
+    annee = (
+        int(match_fr.group(3))
+        if match_fr.group(3)
+        else now.year
+    )
+
+    cible = date(annee, mois, jour)
+
+    return cible, match_fr.group(0)
+
+
+def resoudre_temporalite(query, now=None):
+    """
+    Résout la temporalité d'une requête météorologique.
+
+    Gère :
+    - aujourd'hui et ses abréviations ;
+    - hier, demain, après-demain ;
+    - dates numériques et françaises ;
+    - bulletin publié à une date précise ;
+    - horizon de prévision sur 72 heures ;
+    - période historique de trois jours.
+    """
+
+    if now is None:
+        now = datetime.now(METEOGPT_TIMEZONE)
+
+    query_norm = normaliser_valeur_metadata(query) or ""
+
+    query_temporal = " ".join(
         query_norm
         .replace("'", " ")
         .replace("’", " ")
-    )
-
-    query_temporal = " ".join(
-        query_temporal.split()
+        .split()
     )
 
     # --------------------------------------------------------
-    # APRÈS-DEMAIN
+    # 1. EXTRACTION D'UNE DATE EXPLICITE
     # --------------------------------------------------------
 
-    if "apres demain" in query_temporal:
+    cible = None
+    expression_date = None
 
-        cible = (
-            now
-            + timedelta(days=2)
+    # Date numérique : 17/09/2026 ou 17-09-2026
+    match_numeric = re.search(
+        r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b",
+        str(query).lower()
+    )
+
+    if match_numeric:
+
+        jour, mois, annee = map(
+            int,
+            match_numeric.groups()
         )
 
-        start, end = (
-            construire_periode_jour(
-                cible
+        cible = date(annee, mois, jour)
+        expression_date = match_numeric.group(0)
+
+    else:
+
+        # Normalisation des noms de mois existants
+        mois_fr = {
+            normaliser_valeur_metadata(nom): numero
+            for nom, numero in FRENCH_MONTHS.items()
+        }
+
+        month_pattern = "|".join(
+            re.escape(nom)
+            for nom in sorted(
+                mois_fr,
+                key=len,
+                reverse=True
             )
         )
 
-        return {
-            "mode": "relative",
-            "expression": "apres-demain",
-            "start": start,
-            "end": end,
-        }
-
-    # --------------------------------------------------------
-    # DEMAIN
-    # --------------------------------------------------------
-
-    if re.search(
-        r"\bdemain\b",
-        query_temporal,
-    ):
-
-        cible = (
-            now
-            + timedelta(days=1)
+        match_french = re.search(
+            rf"\b(\d{{1,2}})\s+({month_pattern})"
+            rf"(?:\s+(\d{{4}}))?\b",
+            query_temporal
         )
 
-        start, end = (
-            construire_periode_jour(
-                cible
+        if match_french:
+
+            jour = int(match_french.group(1))
+            mois = mois_fr[match_french.group(2)]
+
+            annee = (
+                int(match_french.group(3))
+                if match_french.group(3)
+                else now.year
             )
-        )
 
-        return {
-            "mode": "relative",
-            "expression": "demain",
-            "start": start,
-            "end": end,
-        }
+            cible = date(annee, mois, jour)
+            expression_date = match_french.group(0)
 
     # --------------------------------------------------------
-    # HIER
+    # 2. PÉRIODE HISTORIQUE ANCRÉE À UNE DATE
     # --------------------------------------------------------
 
-    if re.search(
-        r"\bhier\b",
-        query_temporal,
-    ):
+    if cible is not None:
 
-        cible = (
-            now
-            - timedelta(days=1)
+        horizon_historique = re.search(
+            r"\b(?:3|trois)\s+jours?\s+suivants?\b",
+            query_temporal
         )
 
-        start, end = (
-            construire_periode_jour(
-                cible
+        if horizon_historique:
+
+            # Exemple : trois jours suivant le 17 septembre
+            # => 18, 19 et 20 septembre
+
+            start, _ = construire_periode_jour(
+                cible + timedelta(days=1)
             )
+
+            _, end = construire_periode_jour(
+                cible + timedelta(days=3)
+            )
+
+            return {
+                "mode": "duration",
+                "expression": (
+                    f"3 jours suivant {expression_date}"
+                ),
+                "start": start,
+                "end": end,
+                "publication_cutoff": cible,
+            }
+
+        # ----------------------------------------------------
+        # 3. BULLETIN PUBLIÉ À UNE DATE PRÉCISE
+        # ----------------------------------------------------
+
+        expression_norm = normaliser_valeur_metadata(
+            expression_date
         )
 
-        return {
-            "mode": "relative",
-            "expression": "hier",
-            "start": start,
-            "end": end,
-        }
+        mention_document = re.search(
+            r"\b(?:bulletin|previ\w*)\b",
+            query_temporal
+        )
+
+        date_introduite_par_du = re.search(
+            r"\bdu\s+"
+            + re.escape(expression_norm)
+            + r"\b",
+            query_temporal
+        )
+
+        if mention_document and date_introduite_par_du:
+
+            start, end = construire_periode_jour(cible)
+
+            return {
+                "mode": "publication",
+                "expression": expression_date,
+                "start": start,
+                "end": end,
+            }
 
     # --------------------------------------------------------
-    # AUJOURD'HUI
+    # 4. APRÈS-DEMAIN, DEMAIN ET HIER
+    # --------------------------------------------------------
+
+    expressions_relatives = [
+        (
+            r"\b(?:apres\s+(?:demain|dmain|dm)"
+            r"|apresdemain)\b",
+            2,
+            "apres-demain",
+        ),
+        (
+            r"\b(?:demain|dmain|dm)\b",
+            1,
+            "demain",
+        ),
+        (
+            r"\bhier\b",
+            -1,
+            "hier",
+        ),
+    ]
+
+    for pattern, decalage, expression in expressions_relatives:
+
+        if re.search(pattern, query_temporal):
+
+            cible_relative = (
+                now.date()
+                + timedelta(days=decalage)
+            )
+
+            start, end = construire_periode_jour(
+                cible_relative
+            )
+
+            return {
+                "mode": "relative",
+                "expression": expression,
+                "start": start,
+                "end": end,
+            }
+
+    # --------------------------------------------------------
+    # 5. AUJOURD'HUI ET ABRÉVIATIONS SMS
     #
-    # RÈGLE MÉTIER :
+    # Règle métier conservée :
     # aujourd'hui = instant exact de la requête
     # --------------------------------------------------------
 
-    if (
-        "aujourd hui" in query_temporal
-        or
-        "aujourdhui" in query_temporal
+    if re.search(
+        r"\b(?:aujourd\s+hui|aujourdhui"
+        r"|ojd|aujd|ajd|auj)\b",
+        query_temporal
     ):
 
         return {
@@ -1001,20 +1160,34 @@ def resoudre_temporalite(
         }
 
     # --------------------------------------------------------
-    # HORIZON 72 HEURES
+    # 6. DATE EXPLICITE ORDINAIRE
+    # --------------------------------------------------------
+
+    if cible is not None:
+
+        start, end = construire_periode_jour(cible)
+
+        return {
+            "mode": "explicit",
+            "expression": expression_date,
+            "start": start,
+            "end": end,
+        }
+
+    # --------------------------------------------------------
+    # 7. HORIZON DES 72 HEURES
+    # Sans date explicite
     # --------------------------------------------------------
 
     patterns_72h = [
         r"\b72\s*h\b",
         r"\b72\s*(?:prochaines?\s+)?heures?\b",
+        r"\b72\s*heur\b",
         r"\b(?:3|trois)\s+(?:prochains?\s+)?jours?\b",
     ]
 
     if any(
-        re.search(
-            pattern,
-            query_temporal,
-        )
+        re.search(pattern, query_temporal)
         for pattern in patterns_72h
     ):
 
@@ -1022,125 +1195,14 @@ def resoudre_temporalite(
             "mode": "duration",
             "expression": "72 heures",
             "start": now,
-            "end": (
-                now
-                + timedelta(hours=72)
-            ),
+            "end": now + timedelta(hours=72),
         }
 
     # --------------------------------------------------------
-    # DATE NUMÉRIQUE
-    # --------------------------------------------------------
-
-    query_date = (
-        str(query)
-        .lower()
-        .strip()
-    )
-
-    match_numeric = re.search(
-        r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b",
-        query_date,
-    )
-
-    if match_numeric:
-
-        day = int(
-            match_numeric.group(1)
-        )
-
-        month = int(
-            match_numeric.group(2)
-        )
-
-        year = int(
-            match_numeric.group(3)
-        )
-
-        cible = datetime(
-            year,
-            month,
-            day,
-            tzinfo=METEOGPT_TIMEZONE,
-        )
-
-        start, end = (
-            construire_periode_jour(
-                cible
-            )
-        )
-
-        return {
-            "mode": "explicit",
-            "expression":
-                match_numeric.group(0),
-            "start": start,
-            "end": end,
-        }
-
-    # --------------------------------------------------------
-    # DATE EN FRANÇAIS
-    # --------------------------------------------------------
-
-    month_pattern = "|".join(
-        map(
-            re.escape,
-            FRENCH_MONTHS.keys(),
-        )
-    )
-
-    match_french = re.search(
-        rf"\b(\d{{1,2}})\s+({month_pattern})(?:\s+(\d{{4}}))?\b",
-        query_temporal,
-    )
-
-    if match_french:
-
-        day = int(
-            match_french.group(1)
-        )
-
-        month_name = (
-            match_french.group(2)
-        )
-
-        year = (
-            int(match_french.group(3))
-            if match_french.group(3)
-            else now.year
-        )
-
-        month = (
-            FRENCH_MONTHS[
-                month_name
-            ]
-        )
-
-        cible = datetime(
-            year,
-            month,
-            day,
-            tzinfo=METEOGPT_TIMEZONE,
-        )
-
-        start, end = (
-            construire_periode_jour(
-                cible
-            )
-        )
-
-        return {
-            "mode": "explicit",
-            "expression":
-                match_french.group(0),
-            "start": start,
-            "end": end,
-        }
-
-    # --------------------------------------------------------
-    # AUCUNE DATE EXPLICITE
+    # 8. AUCUNE DATE RECONNUE
     #
-    # Requête météo courante = instant présent.
+    # Règle initiale conservée :
+    # météo courante = instant présent
     # --------------------------------------------------------
 
     return {
@@ -1149,6 +1211,7 @@ def resoudre_temporalite(
         "start": now,
         "end": now,
     }
+
 
 
 def analyser_contraintes_metadata(
@@ -1363,234 +1426,183 @@ def conserver_date_publication(
     ]
 
 
-def selectionner_chunks_temporels(
-    chunks,
-    temporalite,
-    now
-):
 
-    if not chunks:
+def selectionner_chunks_temporels(chunks, temporalite, now):
+    """
+    Sélectionne les chunks selon la temporalité demandée.
+
+    - Demande courante : validité + fraîcheur par catégorie.
+    - Date future : dernière publication disponible couvrant
+      la période.
+    - Date historique : conservation des sources disponibles
+      à cette date.
+    - Publication précise : correspondance sur la date
+      de publication, indépendamment de la validité.
+    """
+
+    if not chunks or not temporalite:
         return []
 
-    if temporalite is None:
-        return []
+    target_start = temporalite.get("start")
+    target_end = temporalite.get("end")
+    mode = temporalite.get("mode")
 
-    target_start = (
-        temporalite.get(
-            "start"
-        )
-    )
-
-    target_end = (
-        temporalite.get(
-            "end"
-        )
-    )
-
-    mode = (
-        temporalite.get(
-            "mode"
-        )
-    )
-
-    expression = (
-        temporalite.get(
-            "expression"
-        )
-    )
-
-    if (
-        target_start is None
-        or
-        target_end is None
-    ):
+    if target_start is None or target_end is None:
         return []
 
     today = now.date()
+    target_date = target_start.date()
 
-    target_date = (
-        target_start.date()
-    )
+    # --------------------------------------------------------
+    # 1. Vérifier la disponibilité réelle d'un document
+    # --------------------------------------------------------
 
-    # ========================================================
-    # OUTIL INTERNE :
-    # publication la plus récente par catégorie
-    # ========================================================
-
-    def garder_plus_recents_par_categorie(
-        candidats
-    ):
-
-        if not candidats:
-            return []
-
-        par_categorie = defaultdict(
-            list
+    def publication_disponible(chunk, limite):
+        publication = parser_datetime_metadata(
+            lire_champ_chunk(chunk, "date_publication")
         )
 
+        return (
+            publication is not None
+            and publication <= now
+            and publication.date() <= limite
+        )
+
+    # --------------------------------------------------------
+    # 2. Garder la dernière publication par catégorie
+    # Logique initiale conservée
+    # --------------------------------------------------------
+
+    def garder_plus_recents_par_categorie(candidats):
+        par_categorie = defaultdict(list)
+
         for chunk in candidats:
+            categorie = lire_champ_chunk(chunk, "category")
 
-            category = (
-                lire_champ_chunk(
-                    chunk,
-                    "category"
-                )
-            )
-
-            if category is not None:
-
-                par_categorie[
-                    category
-                ].append(
-                    chunk
-                )
+            if categorie is not None:
+                par_categorie[categorie].append(chunk)
 
         resultats = []
 
-        for (
-            category,
-            category_chunks
-        ) in par_categorie.items():
-
+        for category_chunks in par_categorie.values():
             dates = [
-                obtenir_date_publication(
-                    chunk
-                )
-                for chunk
-                in category_chunks
-                if obtenir_date_publication(
-                    chunk
-                )
-                is not None
+                obtenir_date_publication(chunk)
+                for chunk in category_chunks
+                if obtenir_date_publication(chunk) is not None
             ]
 
             if not dates:
                 continue
 
-            date_retenue = max(
-                dates
-            )
+            date_retenue = max(dates)
 
             resultats.extend(
-                [
-                    chunk
-                    for chunk
-                    in category_chunks
-                    if obtenir_date_publication(
-                        chunk
-                    )
-                    == date_retenue
-                ]
+                chunk
+                for chunk in category_chunks
+                if obtenir_date_publication(chunk) == date_retenue
             )
 
         return resultats
 
-    # ========================================================
-    # A. MAINTENANT / AUJOURD'HUI
-    #
-    # début_validité <= NOW <= fin_validité
-    # ========================================================
+    # --------------------------------------------------------
+    # A. BULLETIN PUBLIÉ À UNE DATE PRÉCISE
+    # --------------------------------------------------------
+
+    if mode == "publication":
+        if target_date > today:
+            return []
+
+        return [
+            chunk
+            for chunk in chunks
+            if (
+                publication_disponible(chunk, target_date)
+                and obtenir_date_publication(chunk) == target_date
+            )
+        ]
+
+    # --------------------------------------------------------
+    # B. MAINTENANT / AUJOURD'HUI
+    # --------------------------------------------------------
 
     if (
         mode == "current"
-        or
-        expression == "aujourd'hui"
+        or temporalite.get("expression") == "aujourd'hui"
     ):
-
         candidats = [
             chunk
-            for chunk
-            in chunks
-            if chunk_couvre_periode(
-                chunk,
-                now,
-                now,
+            for chunk in chunks
+            if (
+                publication_disponible(chunk, today)
+                and chunk_couvre_periode(chunk, now, now)
             )
         ]
 
-        return (
-            garder_plus_recents_par_categorie(
-                candidats
-            )
-        )
+        return garder_plus_recents_par_categorie(candidats)
 
-    # ========================================================
-    # B. HORIZON 72 HEURES
-    # ========================================================
+    # --------------------------------------------------------
+    # C. HORIZON DE PRÉVISION
+    # --------------------------------------------------------
 
     if mode == "duration":
+        cutoff = temporalite.get("publication_cutoff")
+
+        if isinstance(cutoff, datetime):
+            cutoff = cutoff.date()
+
+        limite = min(cutoff or today, today)
 
         candidats = [
             chunk
-            for chunk
-            in chunks
-            if chunk_couvre_periode(
-                chunk,
-                target_start,
-                target_end,
+            for chunk in chunks
+            if (
+                publication_disponible(chunk, limite)
+                and chunk_couvre_periode(
+                    chunk,
+                    target_start,
+                    target_end
+                )
             )
         ]
 
-        return (
-            garder_plus_recents_par_categorie(
-                candidats
-            )
-        )
+        # Horizon historique ancré à une date :
+        # conserver les sources disponibles à cette date.
+        if cutoff is not None:
+            return candidats
 
-    # ========================================================
-    # C. DATE PASSÉE EXPLICITE
-    # ========================================================
+        # Horizon courant :
+        # privilégier les publications les plus récentes.
+        return garder_plus_recents_par_categorie(candidats)
 
-    if target_date < today:
-
-        candidats = [
-            chunk
-            for chunk
-            in chunks
-            if chunk_couvre_periode(
-                chunk,
-                target_start,
-                target_end,
-            )
-        ]
-
-        return (
-            garder_plus_recents_par_categorie(
-                candidats
-            )
-        )
-    # ========================================================
-    # D. DATE FUTURE
-    # ========================================================
+    # --------------------------------------------------------
+    # D. DATE EXPLICITE OU RELATIVE
+    # --------------------------------------------------------
 
     candidats = [
         chunk
-        for chunk
-        in chunks
+        for chunk in chunks
         if (
-            chunk_couvre_periode(
+            publication_disponible(
+                chunk,
+                min(target_date, today)
+            )
+            and chunk_couvre_periode(
                 chunk,
                 target_start,
-                target_end,
+                target_end
             )
-            and
-            obtenir_date_publication(
-                chunk
-            )
-            is not None
-            and
-            obtenir_date_publication(
-                chunk
-            )
-            <= today
         )
     ]
 
-    return (
-        garder_plus_recents_par_categorie(
-            candidats
-        )
-    )
+    # Date passée ou aujourd'hui explicitement daté :
+    # conserver les éditions disponibles à cette date.
+    if target_date <= today:
+        return candidats
+
+    # Date future : conserver la dernière publication
+    # disponible par catégorie.
+    return garder_plus_recents_par_categorie(candidats)
+
 
 
 # ============================================================
@@ -1663,77 +1675,103 @@ def chunk_geographiquement_admissible(
 # 12' fallback pour chunks expirés
 # ============================================================
 
+
 def selectionner_chunks_fallback_expire(
     chunks,
     temporalite,
     now
 ):
     """
-    Retourne les chunks correspondant aux dernières
-    informations ANACIM disponibles avant la période
-    demandée lorsqu'aucun document valide ne la couvre.
+    Sélectionne les dernières informations expirées
+    pour la période demandée.
 
-    Ces données sont explicitement considérées comme
-    expirées pour la période demandée.
+    Exclut les documents non encore publiés à la date
+    de référence ou indisponibles au moment de la requête.
     """
 
     if not chunks:
         return []
 
-    temporalite = (
-        temporalite
-        or {}
-    )
+    temporalite = temporalite or {}
 
     reference = (
-        temporalite.get(
-            "start"
-        )
+        temporalite.get("start")
         or now
     )
+
+    # Ne jamais utiliser une publication future
+    # ou postérieure à la période historique demandée.
+    limite_publication = min(
+        reference.date(),
+        now.date()
+    )
+
+    # Pour un horizon historique ancré à une date,
+    # respecter la date limite de publication.
+    cutoff = temporalite.get("publication_cutoff")
+
+    if cutoff is not None:
+
+        cutoff_dt = parser_datetime_metadata(cutoff)
+
+        if cutoff_dt is None:
+            return []
+
+        limite_publication = min(
+            limite_publication,
+            cutoff_dt.date()
+        )
 
     candidats = []
 
     for chunk in chunks:
 
-        date_fin = (
-            parser_datetime_metadata(
-                lire_champ_chunk(
-                    chunk,
-                    "date_fin_validite"
-                )
+        publication = parser_datetime_metadata(
+            lire_champ_chunk(
+                chunk,
+                "date_publication"
             )
         )
 
-        if (
-            date_fin is not None
-            and
-            date_fin < reference
-        ):
+        date_fin = parser_datetime_metadata(
+            lire_champ_chunk(
+                chunk,
+                "date_fin_validite"
+            )
+        )
 
+        # Une publication inconnue ne permet pas
+        # de confirmer la disponibilité historique.
+        if publication is None or date_fin is None:
+            continue
+
+        if (
+            publication > now
+            or publication.date() > limite_publication
+        ):
+            continue
+
+        if date_fin < reference:
             candidats.append(
-                (
-                    date_fin,
-                    chunk
-                )
+                (date_fin, chunk)
             )
 
     if not candidats:
         return []
 
+    # Logique initiale conservée :
+    # dernière fin de validité disponible.
     derniere_fin_validite = max(
         date_fin
-        for date_fin, _
-        in candidats
+        for date_fin, _ in candidats
     )
 
     return [
         chunk
-        for date_fin, chunk
-        in candidats
-        if date_fin
-        == derniere_fin_validite
+        for date_fin, chunk in candidats
+        if date_fin == derniere_fin_validite
     ]
+
 
 # ============================================================
 # 13. SOUS-CORPUS ADMISSIBLE
@@ -1787,32 +1825,31 @@ def selectionner_chunks_admissibles(
 
 
     # ========================================================
-    # 2. FILTRAGE TEMPOREL
+    # 2. FILTRAGE GÉOGRAPHIQUE
+    # Avant la sélection de la publication la plus récente
     # ========================================================
 
-    chunks_temporels = (
-        selectionner_chunks_temporels(
-            chunks=chunks_categorie,
-            temporalite=
-                contraintes["temporal"],
-            now=now
-        )
-    )
-
-
-    # ========================================================
-    # 3. FILTRAGE GÉOGRAPHIQUE
-    # ========================================================
-
-    chunks_finaux = [
+    chunks_geographiques = [
         chunk
-        for chunk
-        in chunks_temporels
+        for chunk in chunks_categorie
         if chunk_geographiquement_admissible(
             chunk,
             contraintes["location"]
         )
     ]
+
+    # ========================================================
+    # 3. FILTRAGE TEMPOREL
+    # Sur les chunks géographiquement admissibles
+    # ========================================================
+
+    chunks_temporels = selectionner_chunks_temporels(
+        chunks=chunks_geographiques,
+        temporalite=contraintes["temporal"],
+        now=now
+    )
+
+    chunks_finaux = chunks_temporels
 
 
     # ========================================================
@@ -1822,90 +1859,58 @@ def selectionner_chunks_admissibles(
     #
     # Si aucun bulletin météo général n'est disponible,
     # on regarde les autres catégories disponibles pour
-    # la même période avant de conclure à une absence.
-    # ========================================================
+    # la même période avant de conclure à une absence et localite en
+    # premiere si elle existe.
+   # ========================================================
 
     fallback_used = False
     data_status = "valid"
 
-    category_mode = (
-        contraintes[
-            "category"
-        ].get(
-            "mode"
-        )
-    )
-
+    category_mode = contraintes["category"].get("mode")
     chunks_alternatifs = []
 
+    if not chunks_finaux and category_mode == "general":
 
-    if (
-        not chunks_finaux
-        and
-        category_mode == "general"
-    ):
+        contrainte_localite = contraintes["location"]
 
-        # ----------------------------------------------------
-        # Tous les bulletins couvrant la même période,
-        # quelle que soit leur catégorie
-        # ----------------------------------------------------
-
-        chunks_alternatifs_temporels = (
-            selectionner_chunks_temporels(
-                chunks=BM25_CHUNKS,
-                temporalite=
-                    contraintes["temporal"],
-                now=now
-            )
+        demande_localisee = (
+            contrainte_localite is not None
+            and contrainte_localite.get("mode") == "specific"
+            and contrainte_localite.get("localite") is not None
         )
 
-
-        # ----------------------------------------------------
-        # On conserve d'abord la contrainte géographique
-        # lorsqu'elle peut être appliquée.
-        #
-        # Pour les catégories sans localité structurée,
-        # chunk_geographiquement_admissible() les conserve.
-        # ----------------------------------------------------
-
-        chunks_alternatifs = [
+        # Filtrage géographique AVANT la sélection
+        # temporelle et la fraîcheur par catégorie.
+        candidats_alternatifs_geo = [
             chunk
-            for chunk
-            in chunks_alternatifs_temporels
+            for chunk in BM25_CHUNKS
             if chunk_geographiquement_admissible(
                 chunk,
-                contraintes["location"]
+                contrainte_localite,
             )
         ]
 
+        chunks_alternatifs = selectionner_chunks_temporels(
+            chunks=candidats_alternatifs_geo,
+            temporalite=contraintes["temporal"],
+            now=now,
+        )
 
-        # ----------------------------------------------------
-        # Si aucune correspondance géographique structurée
-        # n'est disponible, on conserve quand même les
-        # bulletins de la même période.
-        #
-        # Leur pertinence textuelle sera ensuite départagée
-        # par le Retriever.
-        # ----------------------------------------------------
+        # Assouplissement réservé aux demandes
+        # sans localité précise.
+        if not chunks_alternatifs and not demande_localisee:
 
-        if not chunks_alternatifs:
-
-            chunks_alternatifs = (
-                chunks_alternatifs_temporels
-            )
-
+            chunks_alternatifs = selectionner_chunks_temporels(
+                chunks=BM25_CHUNKS,
+                temporalite=contraintes["temporal"],
+                now=now,
+          )
 
         if chunks_alternatifs:
 
-            chunks_finaux = (
-                chunks_alternatifs
-            )
-
+            chunks_finaux = chunks_alternatifs
             fallback_used = True
-
-            data_status = (
-                "alternative_same_date"
-            )
+            data_status = "alternative_same_date"
 
         else:
 
@@ -1921,12 +1926,25 @@ def selectionner_chunks_admissibles(
     # 5. FALLBACK VERS UNE AUTRE DATE
     # ========================================================
 
-    if not chunks_finaux:
+    mode_temporel = contraintes["temporal"].get("mode")
+
+        # Conserver la contrainte géographique
+    # également pour les bulletins expirés.
+    chunks_fallback_geographiques = [
+        chunk
+        for chunk in chunks_categorie
+        if chunk_geographiquement_admissible(
+            chunk,
+            contraintes["location"]
+        )
+    ]
+
+    if not chunks_finaux and mode_temporel != "publication":
 
         chunks_finaux = (
             selectionner_chunks_fallback_expire(
                 chunks=
-                    chunks_categorie,
+                    chunks_fallback_geographiques,
                 temporalite=
                     contraintes["temporal"],
                 now=
@@ -2011,16 +2029,13 @@ def selectionner_chunks_admissibles(
                     chunks_temporels
                 ),
 
+
             "after_geography":
-                len([
-                    chunk
-                    for chunk
-                    in chunks_temporels
-                    if chunk_geographiquement_admissible(
-                        chunk,
-                        contraintes["location"]
-                    )
-                ]),
+                len(chunks_geographiques),
+
+            "after_temporal":
+                len(chunks_temporels),
+
 
             "alternative_same_date":
                 len(
