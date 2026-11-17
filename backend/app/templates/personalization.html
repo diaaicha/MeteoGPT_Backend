@@ -1,0 +1,1191 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta name="referrer" content="no-referrer">
+
+    <title>XamMeteo — Personnalisation</title>
+
+    <style nonce="__CSP_NONCE__">
+
+        /* ==================================================
+           1. COULEURS WHATSAPP
+           ================================================== */
+
+        :root {
+            --primary: #008069;
+            --primary-dark: #006B57;
+            --accent: #25D366;
+            --background: #EFEAE2;
+            --surface: #FFFFFF;
+            --text: #111B21;
+            --secondary: #667781;
+            --border: #DCE3E1;
+            --light-green: #E7FCE3;
+            --error: #B42318;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--background);
+            color: var(--text);
+
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Arial,
+                sans-serif;
+        }
+
+        /* ==================================================
+           2. EN-TÊTE
+           ================================================== */
+
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 18px 20px;
+        }
+
+        .header-content {
+            max-width: 440px;
+            margin: auto;
+
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .logo {
+            width: 46px;
+            height: 46px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            background: white;
+            border-radius: 50%;
+            font-size: 23px;
+
+            flex-shrink: 0;
+        }
+
+        .brand-name {
+            font-size: 19px;
+            font-weight: 700;
+        }
+
+        .brand-description {
+            margin-top: 4px;
+            font-size: 12px;
+            color: #D9FDD3;
+        }
+
+        /* ==================================================
+           3. CONTENEUR PRINCIPAL
+           ================================================== */
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            padding: 24px 16px;
+            margin: auto;
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 28px 22px;
+
+            box-shadow:
+                0 4px 18px rgba(17, 27, 33, 0.06);
+        }
+
+        .introduction {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .profile-icon {
+            width: 68px;
+            height: 68px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            background: var(--light-green);
+            color: var(--primary);
+
+            border-radius: 50%;
+            margin: 0 auto 18px;
+        }
+
+        .profile-icon svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        h1 {
+            font-size: 22px;
+            line-height: 1.35;
+            margin: 0 0 12px;
+        }
+
+        .description {
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--secondary);
+            margin: 0;
+        }
+
+        /* ==================================================
+           4. CHAMPS DU FORMULAIRE
+           ================================================== */
+
+        .field {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .required {
+            color: var(--primary);
+        }
+
+        input {
+            width: 100%;
+            height: 52px;
+            padding: 0 14px;
+
+            border: 1px solid var(--border);
+            border-radius: 10px;
+
+            font-family: inherit;
+            font-size: 16px;
+            color: var(--text);
+            background: white;
+
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input::placeholder {
+            color: #87949C;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+
+            box-shadow:
+                0 0 0 3px rgba(0, 128, 105, 0.1);
+        }
+
+        /* ==================================================
+           5. CONFIDENTIALITÉ
+           ================================================== */
+
+        .privacy {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+
+            padding: 14px;
+            margin: 8px 0 22px;
+
+            background: #F0F7F3;
+            border-radius: 10px;
+
+            color: #53675F;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .privacy svg {
+            color: var(--primary);
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        /* ==================================================
+           6. BOUTONS
+           ================================================== */
+
+        .button {
+            display: block;
+            width: 100%;
+
+            padding: 14px 16px;
+            min-height: 48px;
+
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.4;
+
+            text-align: center;
+            text-decoration: none;
+
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .button-primary {
+            background: var(--primary);
+            color: white;
+            border: 1px solid var(--primary);
+        }
+
+        .button-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .button-secondary {
+            margin-top: 12px;
+
+            background: white;
+            color: var(--primary);
+            border: 1px solid var(--border);
+        }
+
+        .button-secondary:hover {
+            background: #F7FAF8;
+        }
+
+        .button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .button:focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: 3px;
+        }
+
+        /* ==================================================
+           7. MESSAGES ET CONFIRMATION
+           ================================================== */
+
+        .error-message {
+            background: #FEF3F2;
+            color: var(--error);
+
+            font-size: 13px;
+            line-height: 1.6;
+
+            padding: 12px;
+            margin-bottom: 18px;
+            border-radius: 8px;
+        }
+
+        .state {
+            text-align: center;
+            padding: 12px 0;
+        }
+
+        .state .description {
+            margin-bottom: 24px;
+        }
+
+        .state-icon {
+            width: 68px;
+            height: 68px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            margin: 0 auto 20px;
+
+            background: var(--light-green);
+            color: var(--primary);
+
+            font-size: 36px;
+            font-weight: 600;
+
+            border-radius: 50%;
+        }
+
+        .loading {
+            padding: 24px 0;
+            text-align: center;
+            color: var(--secondary);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .footer {
+            margin-top: 22px;
+            text-align: center;
+            color: var(--secondary);
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        /* ==================================================
+           8. ADAPTATION MOBILE
+           ================================================== */
+
+        @media (max-width: 360px) {
+
+            .container {
+                padding: 16px 12px;
+            }
+
+            .card {
+                padding: 24px 16px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+        }
+
+    </style>
+
+</head>
+
+<body data-return-url="__WHATSAPP_RETURN_URL__">
+
+    <!-- EN-TÊTE -->
+
+    <header class="header">
+
+        <div class="header-content">
+
+            <div class="logo" aria-hidden="true">
+                🌤️
+            </div>
+
+            <div>
+
+                <div class="brand-name">
+                    XamMeteo
+                </div>
+
+                <div class="brand-description">
+                    Personnalisation de votre profil
+                </div>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+    <!-- CONTENU PRINCIPAL -->
+
+    <main class="container">
+
+        <section class="card">
+
+            <!-- CHARGEMENT -->
+
+            <div
+                id="loading"
+                class="loading"
+                role="status"
+            >
+                Chargement de votre formulaire sécurisé…
+            </div>
+
+
+            <!-- FORMULAIRE -->
+
+            <div id="form-view" hidden>
+
+                <div class="introduction">
+
+                    <div
+                        class="profile-icon"
+                        aria-hidden="true"
+                    >
+
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                        >
+
+                            <circle
+                                cx="12"
+                                cy="8"
+                                r="4"
+                            />
+
+                            <path
+                                d="M4 21v-2a8 8 0 0 1 16 0v2"
+                            />
+
+                        </svg>
+
+                    </div>
+
+                    <h1 id="form-title">
+                        Personnalisez votre expérience
+                    </h1>
+
+                    <p
+                        id="form-description"
+                        class="description"
+                    >
+                        Renseignez vos informations personnelles.
+                    </p>
+
+                </div>
+
+
+                <form
+                    id="personalization-form"
+                    autocomplete="off"
+                >
+
+                    <div
+                        id="form-error"
+                        class="error-message"
+                        role="alert"
+                        hidden
+                    ></div>
+
+
+                    <!-- PRÉNOM -->
+
+                    <div class="field">
+
+                        <label for="first-name">
+                            Prénom
+                            <span class="required">*</span>
+                        </label>
+
+                        <input
+                            type="text"
+                            id="first-name"
+                            name="first_name"
+                            placeholder="Votre prénom"
+                            maxlength="100"
+                            autocomplete="off"
+                            autocapitalize="words"
+                            required
+                        >
+
+                    </div>
+
+
+                    <!-- NOM -->
+
+                    <div class="field">
+
+                        <label for="last-name">
+                            Nom de famille
+                            <span class="required">*</span>
+                        </label>
+
+                        <input
+                            type="text"
+                            id="last-name"
+                            name="last_name"
+                            placeholder="Votre nom de famille"
+                            maxlength="100"
+                            autocomplete="off"
+                            autocapitalize="words"
+                            required
+                        >
+
+                    </div>
+
+
+                    <!-- CONFIDENTIALITÉ -->
+
+                    <div class="privacy">
+
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                        >
+
+                            <rect
+                                x="5"
+                                y="10"
+                                width="14"
+                                height="11"
+                                rx="2"
+                            />
+
+                            <path
+                                d="M8 10V7a4 4 0 0 1 8 0v3"
+                            />
+
+                        </svg>
+
+                        <span>
+                            Vos informations sont uniquement
+                            utilisées pour personnaliser vos
+                            échanges avec XamMeteo.
+                            Vous pourrez les modifier à tout moment.
+                        </span>
+
+                    </div>
+
+
+                    <!-- VALIDATION -->
+
+                    <button
+                        type="submit"
+                        id="submit-button"
+                        class="button button-primary"
+                    >
+                        Valider mes informations
+                    </button>
+
+
+                    <!-- ANNULATION -->
+
+                    <button
+                        type="button"
+                        id="cancel-button"
+                        class="button button-secondary"
+                    >
+                        Annuler
+                    </button>
+
+                </form>
+
+            </div>
+
+
+            <!-- CONFIRMATION OU LIEN INVALIDE -->
+
+            <div
+                id="result-view"
+                class="state"
+                aria-live="polite"
+                hidden
+            >
+
+                <div
+                    id="result-icon"
+                    class="state-icon"
+                    aria-hidden="true"
+                >
+                    ✓
+                </div>
+
+                <h1 id="result-title"></h1>
+
+                <p
+                    id="result-description"
+                    class="description"
+                ></p>
+
+                <a
+                    id="return-button"
+                    class="button button-primary"
+                    hidden
+                >
+                    Retourner sur WhatsApp
+                </a>
+
+                <p
+                    id="return-instruction"
+                    class="description"
+                    hidden
+                >
+                    Vous pouvez fermer cette page et revenir
+                    à votre conversation WhatsApp.
+                </p>
+
+            </div>
+
+        </section>
+
+
+        <footer class="footer">
+
+            XamMeteo · Assistant météorologique de l'ANACIM
+
+        </footer>
+
+    </main>
+
+
+    <script nonce="__CSP_NONCE__">
+
+        "use strict";
+
+        /* ==================================================
+           1. RÉCUPÉRATION DU TOKEN
+           ================================================== */
+
+        let token = window.location.hash.slice(1);
+
+        // Retirer le token de l'adresse affichée.
+        // Il reste uniquement dans la mémoire de la page.
+
+        if (window.location.hash) {
+
+            window.history.replaceState(
+
+                null,
+
+                "",
+
+                window.location.pathname
+                + window.location.search
+            );
+        }
+
+        // Compatible avec un éventuel préfixe API.
+
+        const apiBase = window.location.pathname.replace(
+            /\/$/,
+            ""
+        );
+
+        const returnUrl = (
+            document.body.dataset.returnUrl || ""
+        );
+
+
+        /* ==================================================
+           2. ÉLÉMENTS DE L'INTERFACE
+           ================================================== */
+
+        const loading = document.getElementById(
+            "loading"
+        );
+
+        const formView = document.getElementById(
+            "form-view"
+        );
+
+        const resultView = document.getElementById(
+            "result-view"
+        );
+
+        const form = document.getElementById(
+            "personalization-form"
+        );
+
+        const firstName = document.getElementById(
+            "first-name"
+        );
+
+        const lastName = document.getElementById(
+            "last-name"
+        );
+
+        const submitButton = document.getElementById(
+            "submit-button"
+        );
+
+        const cancelButton = document.getElementById(
+            "cancel-button"
+        );
+
+        const formError = document.getElementById(
+            "form-error"
+        );
+
+        let buttonLabel = "Valider mes informations";
+
+        let busy = false;
+
+
+        /* ==================================================
+           3. COMMUNICATION AVEC FASTAPI
+           ================================================== */
+
+        async function apiRequest(action, payload) {
+
+            const response = await fetch(
+
+                apiBase + "/" + action,
+
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    body: JSON.stringify(payload),
+
+                    cache: "no-store",
+
+                    credentials: "same-origin",
+
+                    referrerPolicy: "no-referrer"
+                }
+            );
+
+            let data;
+
+            try {
+
+                data = await response.json();
+
+            } catch {
+
+                data = {};
+            }
+
+            if (
+                !response.ok
+                || data.success !== true
+            ) {
+
+                const error = new Error(
+
+                    data.message
+
+                    || "Une erreur est survenue."
+                );
+
+                error.status = response.status;
+
+                throw error;
+            }
+
+            return data;
+        }
+
+
+        /* ==================================================
+           4. GESTION DE L'AFFICHAGE
+           ================================================== */
+
+        function showError(message) {
+
+            formError.textContent = message;
+
+            formError.hidden = false;
+        }
+
+
+        function clearError() {
+
+            formError.textContent = "";
+
+            formError.hidden = true;
+        }
+
+
+        function setBusy(value, action = "") {
+
+            busy = value;
+
+            submitButton.disabled = value;
+
+            cancelButton.disabled = value;
+
+            firstName.disabled = value;
+
+            lastName.disabled = value;
+
+            submitButton.textContent = (
+
+                value && action === "save"
+
+                ? "Enregistrement…"
+
+                : buttonLabel
+            );
+
+            cancelButton.textContent = (
+
+                value && action === "cancel"
+
+                ? "Annulation…"
+
+                : "Annuler"
+            );
+        }
+
+
+        function showResult(
+            title,
+            description,
+            icon
+        ) {
+
+            token = "";
+
+            firstName.value = "";
+
+            lastName.value = "";
+
+            loading.hidden = true;
+
+            formView.hidden = true;
+
+            resultView.hidden = false;
+
+            document.getElementById(
+                "result-title"
+            ).textContent = title;
+
+            document.getElementById(
+                "result-description"
+            ).textContent = description;
+
+            document.getElementById(
+                "result-icon"
+            ).textContent = icon;
+
+            const returnButton = document.getElementById(
+                "return-button"
+            );
+
+            const returnInstruction = document.getElementById(
+                "return-instruction"
+            );
+
+            if (returnUrl) {
+
+                returnButton.href = returnUrl;
+
+                returnButton.hidden = false;
+
+                returnInstruction.hidden = true;
+
+            } else {
+
+                returnButton.hidden = true;
+
+                returnInstruction.hidden = false;
+            }
+        }
+
+
+        function showExpired() {
+
+            showResult(
+
+                "Lien indisponible",
+
+                "Ce lien est invalide, expiré ou déjà "
+                + "utilisé. Retournez sur WhatsApp pour "
+                + "demander un nouveau formulaire.",
+
+                "!"
+            );
+        }
+
+
+        /* ==================================================
+           5. CHARGEMENT DU FORMULAIRE
+           ================================================== */
+
+        async function loadForm() {
+
+            if (
+                !/^[A-Za-z0-9_-]{43}$/.test(token)
+            ) {
+
+                showExpired();
+
+                return;
+            }
+
+            try {
+
+                const data = await apiRequest(
+
+                    "ouvrir",
+
+                    {
+                        token: token
+                    }
+                );
+
+                const profile = data.formulaire;
+
+                firstName.value = (
+                    profile.first_name || ""
+                );
+
+                lastName.value = (
+                    profile.last_name || ""
+                );
+
+                buttonLabel = profile.button_label;
+
+                submitButton.textContent = buttonLabel;
+
+                const modification = (
+
+                    profile.mode === "modification"
+                );
+
+                document.getElementById(
+                    "form-title"
+                ).textContent = (
+
+                    modification
+
+                    ? "Modifier mes informations"
+
+                    : "Personnalisez votre expérience"
+                );
+
+                document.getElementById(
+                    "form-description"
+                ).textContent = (
+
+                    modification
+
+                    ? (
+                        "Vos informations actuelles "
+                        + "sont affichées ci-dessous. "
+                        + "Modifiez-les puis validez "
+                        + "vos changements."
+                    )
+
+                    : (
+                        "Renseignez votre prénom et "
+                        + "votre nom pour profiter "
+                        + "d'échanges personnalisés "
+                        + "avec XamMeteo."
+                    )
+                );
+
+                loading.hidden = true;
+
+                formView.hidden = false;
+
+            } catch (error) {
+
+                if (error.status === 410) {
+
+                    showExpired();
+
+                } else {
+
+                    showResult(
+
+                        "Formulaire indisponible",
+
+                        "Impossible de charger votre "
+                        + "formulaire actuellement. "
+                        + "Retournez sur WhatsApp "
+                        + "et réessayez.",
+
+                        "!"
+                    );
+                }
+            }
+        }
+
+
+        /* ==================================================
+           6. VALIDATION DU FORMULAIRE
+           ================================================== */
+
+        form.addEventListener(
+
+            "submit",
+
+            async function (event) {
+
+                event.preventDefault();
+
+                if (busy) {
+
+                    return;
+                }
+
+                clearError();
+
+                const first = firstName.value.trim();
+
+                const last = lastName.value.trim();
+
+                if (!first || !last) {
+
+                    showError(
+
+                        "Veuillez renseigner votre "
+                        + "prénom et votre nom."
+                    );
+
+                    return;
+                }
+
+                setBusy(true, "save");
+
+                try {
+
+                    const data = await apiRequest(
+
+                        "valider",
+
+                        {
+
+                            token: token,
+
+                            first_name: first,
+
+                            last_name: last
+                        }
+                    );
+
+                    const modification = (
+
+                        data.mode === "modification"
+                    );
+
+                    showResult(
+
+                        modification
+
+                        ? "Informations modifiées !"
+
+                        : "Informations enregistrées !",
+
+                        "Merci, " + data.first_name
+                        + " ! Votre profil est désormais "
+                        + "à jour. Vous pouvez reprendre "
+                        + "votre conversation avec XamMeteo.",
+
+                        "✓"
+                    );
+
+                } catch (error) {
+
+                    if (error.status === 410) {
+
+                        showExpired();
+
+                    } else if (error.status === 422) {
+
+                        showError(error.message);
+
+                    } else {
+
+                        showError(
+
+                            "Impossible de confirmer "
+                            + "l'enregistrement. "
+                            + "Vérifiez votre connexion "
+                            + "ou demandez un nouveau "
+                            + "formulaire sur WhatsApp."
+                        );
+                    }
+
+                } finally {
+
+                    setBusy(false);
+                }
+            }
+        );
+
+
+        /* ==================================================
+           7. ANNULATION
+           ================================================== */
+
+        cancelButton.addEventListener(
+
+            "click",
+
+            async function () {
+
+                if (busy) {
+
+                    return;
+                }
+
+                clearError();
+
+                setBusy(true, "cancel");
+
+                try {
+
+                    await apiRequest(
+
+                        "annuler",
+
+                        {
+                            token: token
+                        }
+                    );
+
+                    showResult(
+
+                        "Personnalisation annulée",
+
+                        "Vos informations restent "
+                        + "inchangées. Vous pouvez "
+                        + "continuer à utiliser XamMeteo.",
+
+                        "✓"
+                    );
+
+                } catch (error) {
+
+                    if (error.status === 410) {
+
+                        showExpired();
+
+                    } else {
+
+                        showError(
+
+                            "Impossible de confirmer "
+                            + "l'annulation. Vous pouvez "
+                            + "fermer cette page sans "
+                            + "valider vos informations."
+                        );
+                    }
+
+                } finally {
+
+                    setBusy(false);
+                }
+            }
+        );
+
+
+        /* ==================================================
+           8. INITIALISATION
+           ================================================== */
+
+        loadForm();
+
+    </script>
+
+    <noscript>
+        JavaScript est nécessaire pour utiliser ce formulaire.
+    </noscript>
+
+</body>
+</html>

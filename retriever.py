@@ -55,7 +55,7 @@ MAX_QUERY_LENGTH = 512
 
 NORMALIZE_QUERY_EMBEDDINGS = True
 
-DEFAULT_TOP_K = 5
+DEFAULT_TOP_K = 10
 
 HYBRID_METADATA_CANDIDATE_K = 20
 
@@ -64,6 +64,27 @@ RRF_K = 60
 METEOGPT_TIMEZONE = ZoneInfo(
     "Africa/Dakar"
 )
+
+
+# Référence temporelle commune pour les tests
+# et la simulation WhatsApp.
+MODE_DATE_FIXE = True
+
+DATE_REFERENCE_FIXE = datetime(
+    2026, 9, 21, 21, 30,
+    tzinfo=METEOGPT_TIMEZONE,
+)
+
+
+def obtenir_heure_reference_meteogpt(now=None):
+    if now is not None:
+        return now
+
+    if MODE_DATE_FIXE:
+        return DATE_REFERENCE_FIXE
+
+    return datetime.now(METEOGPT_TIMEZONE)
+
 
 DEVICE = (
     "cuda"
@@ -637,6 +658,26 @@ def detecter_categories_requete(query):
     )
 
     # --------------------------------------------------------
+    # EXCLUSIONS EXPLICITES DE CATÉGORIES
+    # --------------------------------------------------------
+
+    # Une catégorie mentionnée négativement ne doit pas
+    # être interprétée comme la catégorie demandée.
+    #
+    # Exemple :
+    # "navigation côtière, pas celles de la pêche"
+    # => navigation_cotiere
+
+    query_norm = re.sub(
+        r"\bpas\s+(?:celles?|celui|ceux)\s+de\s+"
+        r"(?:la\s+|le\s+|l\s+)?"
+        r"(?:peche(?:\s+artisanale)?|navigation\s+cotiere|"
+        r"marine\s+(?:nationale|nationnale|nat))\b",
+        " ",
+        query_norm,
+    )
+
+    # --------------------------------------------------------
     # 1. PÊCHE ARTISANALE
     # --------------------------------------------------------
 
@@ -651,6 +692,7 @@ def detecter_categories_requete(query):
         r"\bpecher\b",
         r"\bpechant\b",
         r"\bfilets?\s+de\s+peche\b",
+        r"\bpech\b",
     ]
 
     if any(
@@ -676,6 +718,7 @@ def detecter_categories_requete(query):
         r"\bforces navales\b",
         r"\bnavires? militaires?\b",
         r"\bbatiments?\s+de\s+guerre\b",
+        r"\bmarine\s+(?:nat|nationnale)\b",
     ]
 
     if any(
@@ -907,6 +950,20 @@ def construire_periode_jour(
     return start, end
 
 
+class DateMeteoInvalide(ValueError):
+    """Date calendaire explicite impossible."""
+    pass
+
+
+def construire_date_calendaire(annee, mois, jour, expression):
+    try:
+        return date(annee, mois, jour)
+    except ValueError as exc:
+        raise DateMeteoInvalide(
+            f"Date invalide : {expression}"
+        ) from exc
+
+
 def _extraire_date_explicite(query_temporal, now, raw_query=None):
     """Extrait une date numérique ou une date française."""
 
@@ -960,7 +1017,7 @@ def resoudre_temporalite(query, now=None):
     """
 
     if now is None:
-        now = datetime.now(METEOGPT_TIMEZONE)
+        now = obtenir_heure_reference_meteogpt()
 
     query_norm = normaliser_valeur_metadata(query) or ""
 
@@ -991,7 +1048,7 @@ def resoudre_temporalite(query, now=None):
             match_numeric.groups()
         )
 
-        cible = date(annee, mois, jour)
+        cible = construire_date_calendaire(annee, mois, jour, match_numeric.group(0))
         expression_date = match_numeric.group(0)
 
     else:
@@ -1028,7 +1085,9 @@ def resoudre_temporalite(query, now=None):
                 else now.year
             )
 
-            cible = date(annee, mois, jour)
+            cible = construire_date_calendaire(
+                annee, mois, jour, match_french.group(0)
+            )
             expression_date = match_french.group(0)
 
     # --------------------------------------------------------
@@ -1784,19 +1843,30 @@ def selectionner_chunks_admissibles(
 ):
 
     if now is None:
+        now = obtenir_heure_reference_meteogpt()
 
-        now = datetime.now(
-            METEOGPT_TIMEZONE
-        )
+
 
     if contraintes is None:
-
-        contraintes = (
-            analyser_contraintes_metadata(
-                query,
-                now=now
-            )
+        contraintes = analyser_contraintes_metadata(
+            query,
+            now=now,
         )
+
+    elif not all(
+        champ in contraintes
+        for champ in ("category", "location", "temporal")
+    ):
+        contraintes_detectees = analyser_contraintes_metadata(
+            query,
+            now=now,
+        )
+
+        contraintes = {
+            **contraintes_detectees,
+            **contraintes,
+        }
+
 
 
     # ========================================================
@@ -2656,7 +2726,8 @@ def hybrid_metadata_retrieve(
     candidate_k=
         HYBRID_METADATA_CANDIDATE_K,
     rrf_k=RRF_K,
-    now=None
+    now=None,
+    contraintes=None
 ):
 
     _ensure_initialized()
@@ -2685,12 +2756,17 @@ def hybrid_metadata_retrieve(
         time.perf_counter()
     )
 
-    admissibilite = (
-        selectionner_chunks_admissibles(
+    if contraintes is None:
+        admissibilite = selectionner_chunks_admissibles(
             query=query,
             now=now
         )
-    )
+    else:
+        admissibilite = selectionner_chunks_admissibles(
+            query=query,
+            contraintes=contraintes,
+            now=now
+        )
 
     admissible_chunk_ids = (
         admissibilite[
@@ -2923,26 +2999,37 @@ def hybrid_metadata_retrieve(
 # 18. INTERFACE PUBLIQUE
 # ============================================================
 
+
 def retrieve(
     query: str,
     top_k: int = DEFAULT_TOP_K,
-    now=None
+    now=None,
+    contraintes=None
 ):
     """
-    Point d'entrée principal du Retriever MeteoGPT.
+    Point d'entrée principal du Retriever.
 
-    En production, `now` reste None et l'heure courante
-    d'Afrique/Dakar est utilisée automatiquement.
+    Sans contraintes explicites, conserve le comportement
+    historique de détection à partir de la requête.
 
-    `now` peut être fourni uniquement pour les tests
-    reproductibles.
+    Si des contraintes sont fournies, elles sont transmises
+    au moteur hybride pour le filtrage documentaire.
     """
+
+    if contraintes is None:
+        return hybrid_metadata_retrieve(
+            query=query,
+            top_k=top_k,
+            now=now
+        )
 
     return hybrid_metadata_retrieve(
         query=query,
         top_k=top_k,
-        now=now
+        now=now,
+        contraintes=contraintes
     )
+
 
 
 # ============================================================

@@ -75,7 +75,7 @@ PIPELINE_NAME = (
 DEFAULT_TOP_K = getattr(
     retriever,
     "DEFAULT_TOP_K",
-    5
+    10
 )
 
 
@@ -266,15 +266,27 @@ def process_text_request(
         )
 
 
-        retrieval_result = (
-            retriever.retrieve(
-                query=
-                    effective_query,
-                top_k=
-                    top_k,
-                now=
-                    now
-            )
+
+        retrieval_kwargs = {
+            "query": effective_query,
+            "top_k": top_k,
+            "now": now,
+        }
+
+        contraintes_agent = agent_result.get(
+            "retrieval_constraints"
+        )
+
+        if contraintes_agent is not None:
+            if not isinstance(contraintes_agent, dict):
+                raise TypeError(
+                    "retrieval_constraints doit être un dictionnaire."
+                )
+
+            retrieval_kwargs["contraintes"] = contraintes_agent
+
+        retrieval_result = retriever.retrieve(
+            **retrieval_kwargs
         )
 
 
@@ -1528,6 +1540,12 @@ def process_request(
                 "intent":
                     None,
 
+                "offer_personalization":
+                    False,
+
+                "personalization_action":
+                    None,
+
                 "answer_text":
                     "",
 
@@ -1660,6 +1678,12 @@ def process_request(
         # 7. SORTIE STANDARDISÉE
         # ====================================================
 
+        # Informations de personnalisation provenant de l'agent.
+        agent_result = (
+            pipeline_result.get("agent_result")
+            or {}
+        )
+
         return {
 
             "success":
@@ -1693,6 +1717,23 @@ def process_request(
             "intent":
                 pipeline_result.get(
                     "intent"
+                ),
+
+            # --------------------------------------------------------
+            # Informations destinées à la couche de personnalisation
+            # --------------------------------------------------------
+
+            "offer_personalization":
+                bool(
+                    agent_result.get(
+                        "offer_personalization",
+                        False
+                    )
+                ),
+
+            "personalization_action":
+                agent_result.get(
+                    "personalization_action"
                 ),
 
             "use_multimodal":
@@ -1817,6 +1858,12 @@ def process_request(
                 None,
 
             "intent":
+                None,
+
+            "offer_personalization":
+                False,
+
+            "personalization_action":
                 None,
 
             "answer_text":

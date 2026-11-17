@@ -241,6 +241,21 @@ def process_chat(
             ),
         )
 
+        # --------------------------------------------------------
+        # Décision de personnalisation de l'agent
+        # --------------------------------------------------------
+
+        agent_result = result.get(
+            "agent_result"
+        ) or {}
+
+        if not isinstance(
+            agent_result,
+            dict
+        ):
+
+            agent_result = {}
+
         return ChatResponse(
             success=success,
 
@@ -263,6 +278,24 @@ def process_chat(
                 result.get(
                     "intent"
                 ),
+
+            offer_personalization=(
+                success
+                and bool(
+                    agent_result.get(
+                        "offer_personalization",
+                        False
+                    )
+                )
+            ),
+
+            personalization_action=(
+                agent_result.get(
+                    "personalization_action"
+                )
+                if success
+                else None
+            ),
 
             generation_mode=
                 result.get(

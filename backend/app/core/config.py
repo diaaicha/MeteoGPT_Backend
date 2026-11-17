@@ -90,7 +90,12 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str | None = None
 
     whatsapp_api_version: str = "v23.0"
+    whatsapp_personalization_flow_id: str | None = None
 
+    whatsapp_personalization_flow_mode: str = "published"
+    whatsapp_public_number: str | None = None
+    personalization_public_base_url: str | None = None
+    whatsapp_app_secret: str | None = None
 
     # --------------------------------------------------------
     # FEATURES

@@ -47,6 +47,11 @@ class AudioChatResponse(BaseModel):
 
     intent: Optional[str] = None
 
+    # Informations de personnalisation
+    offer_personalization: bool = False
+
+    personalization_action: Optional[str] = None
+
     generation_mode: Optional[str] = None
 
     grounded: bool = False

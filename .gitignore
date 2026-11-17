@@ -145,3 +145,21 @@ desktop.ini
 *.tmp
 *.temp
 *.bak
+
+
+
+
+# ------------------------------------------------------------
+# PROFILS UTILISATEURS / DONNEES PERSONNELLES
+# ------------------------------------------------------------
+
+/data/user_profiles.sqlite3*
+
+# ------------------------------------------------------------
+# RESULTATS LOCAUX DES EVALUATIONS
+# ------------------------------------------------------------
+
+/evaluation_retriever/
+/evaluation_generation/
+/figures/
+/robustesse_formulations_fond_blanc.png

@@ -313,6 +313,21 @@ def process_audio_chat(
             result.get("error"),
         )
 
+        # --------------------------------------------------------
+        # Décision de personnalisation de l'agent
+        # --------------------------------------------------------
+
+        agent_result = pipeline_result.get(
+            "agent_result"
+        ) or {}
+
+        if not isinstance(
+            agent_result,
+            dict
+        ):
+
+            agent_result = {}
+
         return AudioChatResponse(
             success=success,
 
@@ -349,6 +364,24 @@ def process_audio_chat(
 
             intent=pipeline_result.get(
                 "intent"
+            ),
+
+            offer_personalization=(
+                success
+                and bool(
+                    agent_result.get(
+                        "offer_personalization",
+                        False
+                    )
+                )
+            ),
+
+            personalization_action=(
+                agent_result.get(
+                    "personalization_action"
+                )
+                if success
+                else None
             ),
 
             generation_mode=(
