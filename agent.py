@@ -51,7 +51,7 @@ from langgraph.checkpoint.memory import (
 )
 
 import retriever
-
+import lexique_meteo
 
 # ============================================================
 # 1. ROUTES
@@ -403,6 +403,19 @@ SALUTATIONS_AGENT = {
     "assalamou aleikoum",
 }
 
+# Variantes de salutations reprises de V2 renforce.
+# Les expressions sont ancrees pour eviter
+# de detourner les questions meteorologiques.
+
+PATTERNS_SALUTATIONS_V2 = [
+    r"^(?:bjr|slt)(?:\s+(?:bjr|slt))*$",
+    r"^(?:bonjour|bonsoir|salut|hello|hi|coucou|hey)(?:\s+(?:bonjour|bonsoir|salut|hello|hi|coucou|hey))*$",
+    r"^(?:salam|salaam|assalamou)$",
+    r"^(?:as\s+salaam|salam|assalamou)\s+(?:alaikum|aleikoum|alaykoum)$",
+    r"^coucou\s+tu\s+es\s+la$",
+]
+
+
 
 EXPRESSIONS_CAPABILITIES = [
     "que peux tu faire",
@@ -417,20 +430,46 @@ EXPRESSIONS_CAPABILITIES = [
     "qui es tu",
 ]
 
+# Formulations de capacites provenant de V2 renforce.
+# Reconnaissance de la question complete uniquement.
+
+PATTERNS_CAPACITES_V2_CIBLEES = [
+    r"^qu est ce que (?:tu peux|vous pouvez) faire$",
+    r"^tu sers a quoi$",
+    r"^(?:comment ca marche|comment fonctionne) (?:ton|votre|ce) service$",
+    r"^(?:as tu|avez vous) acces aux? bulletins?(?: meteo| meteorologiques?)?$",
+]
+
+
 
 EXPRESSIONS_PERSONALIZATION = [
     "personnaliser",
     "personnalisation",
     "personnalise",
     "mes preferences",
-    "mes preferences meteo",
     "modifier mes preferences",
     "changer mes preferences",
-    "ma localite par defaut",
-    "ville par defaut",
-    "localite par defaut",
-    "mes informations par defaut",
+    "mes informations personnelles",
+    "modifier mes informations",
+    "changer mes informations",
+    "mettre a jour mes informations",
+    "modifier mon profil",
+    "changer mon profil",
+    "modifier mon prenom",
+    "modifier mon nom",
+    "changer mon prenom",
+    "changer mon nom",
 ]
+
+EXPRESSIONS_REFUS_PERSONNALISATION = {
+    "continuer sans personnalisation",
+    "continuer sans personnaliser",
+    "je ne souhaite pas personnaliser",
+    "je ne veux pas personnaliser",
+    "sans personnalisation",
+    "pas de personnalisation",
+    "refuser la personnalisation",
+}
 
 
 def detecter_interaction_evidente(
@@ -446,12 +485,23 @@ def detecter_interaction_evidente(
             query
         )
     )
+    texte_salutation = re.sub(
+        r"[^\w\s]",
+        "",
+        query_norm,
+    ).strip()
 
     # --------------------------------------------------------
     # Salutation
     # --------------------------------------------------------
 
-    if query_norm in SALUTATIONS_AGENT:
+    if (
+        query_norm in SALUTATIONS_AGENT
+        or correspond_a_un_pattern(
+            texte_salutation,
+            PATTERNS_SALUTATIONS_V2,
+        )
+    ):
 
         return construire_decision_agent(
 
@@ -478,10 +528,16 @@ def detecter_interaction_evidente(
     # Capacités
     # --------------------------------------------------------
 
-    if any(
-        expression in query_norm
-        for expression
-        in EXPRESSIONS_CAPABILITIES
+    
+    if (
+        any(
+            expression in query_norm
+            for expression in EXPRESSIONS_CAPABILITIES
+        )
+        or correspond_a_un_pattern(
+            normaliser_pour_intention(query),
+            PATTERNS_CAPACITES_V2_CIBLEES,
+        )
     ):
 
         return construire_decision_agent(
@@ -501,6 +557,35 @@ def detecter_interaction_evidente(
             needs_clarification=False,
 
             offer_personalization=False,
+
+            confidence=1.0
+        )
+
+
+
+    # --------------------------------------------------------
+    # Refus de la personnalisation
+    # --------------------------------------------------------
+
+    if query_norm in EXPRESSIONS_REFUS_PERSONNALISATION:
+
+        return construire_decision_agent(
+
+            query=query,
+
+            route=ROUTE_STATIC,
+
+            intent=INTENT_PERSONALIZATION,
+
+            needs_retrieval=False,
+
+            needs_visual=False,
+
+            needs_clarification=False,
+
+            offer_personalization=False,
+
+            personalization_action="skip_personalization",
 
             confidence=1.0
         )
@@ -617,7 +702,7 @@ PATTERNS_72H = [
 
 PATTERNS_KNOWLEDGE_FORM = [
 
-    r"\bqu est ce qu\b",
+    r"\bqu est ce qu(?:e)?\b",
 
     r"\bc est quoi\b",
 
@@ -642,6 +727,12 @@ PATTERNS_KNOWLEDGE_FORM = [
     r"\bquelle est la difference\b",
 
     r"\bquelle difference\b",
+
+
+    r"\bd ou vien(?:t|nent)\b",
+
+    r"\borigine (?:de|des|du|de la)\b",
+
 ]
 
 
@@ -702,7 +793,13 @@ PATTERNS_CONCEPTS_METEO = [
     r"\bpoint\s+de\s+rosee\b",
 
     r"\bconvection\b",
-    r"\bpoussiere\b"
+    r"\bpoussiere\b",
+
+
+    r"\bpluies?\b",
+
+    r"\bavers",
+
 ]
 
 
@@ -765,10 +862,7 @@ def detecter_intention_meteo(
     """
 
     if now is None:
-
-        now = datetime.now(
-            retriever.METEOGPT_TIMEZONE
-        )
+        now = retriever.obtenir_heure_reference_meteogpt()
 
     query_norm = (
         normaliser_pour_intention(
@@ -794,10 +888,95 @@ def detecter_intention_meteo(
         )
     )
 
+
+    
+    # Distinguer une explication scientifique générale
+    # d'une question causale portant sur un événement daté.
+
+    question_causale = (
+        re.search(
+            r"\bpourquoi\b",
+            query_norm
+        ) is not None
+    )
+
+
+    # Reutiliser la resolution temporelle du Retriever
+    # sans confondre le mode courant par defaut
+    # avec une date explicitement demandee.
+
+    temporalite_question = None
+    ancrage_evenement = False
+
+    if (
+        question_causale
+        and forme_connaissance
+        and concept_meteo
+    ):
+        temporalite_question = (
+            retriever.resoudre_temporalite(
+                query,
+                now=now
+            )
+        )
+
+        mode_temporel = temporalite_question.get(
+            "mode"
+        )
+
+        expression_temporelle = (
+            temporalite_question.get("expression")
+        )
+
+        ancrage_evenement = (
+            mode_temporel in {
+                "relative",
+                "explicit",
+                "publication",
+                "duration",
+            }
+            or (
+                mode_temporel == "current"
+                and expression_temporelle == "aujourd'hui"
+            )
+        )
+
+        # Expressions ponctuelles non resolues
+        # explicitement par le Retriever.
+        if not ancrage_evenement:
+            ancrage_evenement = (
+                correspond_a_un_pattern(
+                    query_norm,
+                    [
+                        r"\b(?:maintenant|actuellement|en ce moment)\b",
+                        r"\b(?:ce matin|ce soir|cette nuit|cet apres midi)\b",
+                    ]
+                )
+            )
+
+    question_causale_contextuelle = (
+        question_causale
+        and ancrage_evenement
+    )
+
+
+
+    # Le lexique complete les patterns historiques,
+    # uniquement pour une demande explicative.
+    if forme_connaissance and not concept_meteo:
+        concepts_detectes = (
+            lexique_meteo.reconnaitre_concepts_meteo(
+                query
+            )
+        )
+
+        concept_meteo = bool(concepts_detectes)
+
+
     if (
         forme_connaissance
-        and
-        concept_meteo
+        and concept_meteo
+        and not question_causale_contextuelle
     ):
 
         return construire_decision_agent(
@@ -838,6 +1017,13 @@ def detecter_intention_meteo(
         )
     )
 
+    categories_maritimes_multiples = (
+        set(categories) == {
+            "navigation_cotiere",
+            "marine_nationale",
+        }
+    )
+
 
     # Marine nationale explicite
     if categories == [
@@ -861,17 +1047,7 @@ def detecter_intention_meteo(
         )
 
     # Navigation côtière
-    if (
-        categories == [
-            "navigation_cotiere"
-        ]
-        or
-        set(categories)
-        == {
-            "navigation_cotiere",
-            "marine_nationale",
-        }
-    ):
+    if categories == ["navigation_cotiere"]:
 
         return construire_decision_agent(
 
@@ -950,12 +1126,17 @@ def detecter_intention_meteo(
     # D. TEMPORALITÉ / HISTORIQUE
     # ========================================================
 
-    temporalite = (
-        retriever.resoudre_temporalite(
-            query,
-            now=now
+
+    if temporalite_question is not None:
+        temporalite = temporalite_question
+    else:
+        temporalite = (
+            retriever.resoudre_temporalite(
+                query,
+                now=now
+            )
         )
-    )
+
 
     target_start = (
         temporalite.get(
@@ -1010,6 +1191,31 @@ def detecter_intention_meteo(
 
                 confidence=0.98
             )
+
+
+        # Plusieurs categories maritimes sont possibles.
+    # Aucun domaine unique ne peut etre impose
+    # par la classification deterministe.
+
+
+    if categories_maritimes_multiples:
+        # Demande maritime sans domaine unique explicite.
+        # Conserver la route RAG sans imposer
+        # navigation_cotiere ou marine_nationale.
+        #
+        # Le Retriever conserve ses deux categories
+        # admissibles a partir de la requete.
+
+        return construire_decision_agent(
+            query=query,
+            route=ROUTE_RAG,
+            intent=INTENT_METEO_GENERALE,
+            needs_retrieval=True,
+            offer_personalization=True,
+            confidence=0.80,
+        )
+
+
 
     # ========================================================
     # E. LOCALITÉ CONNUE
@@ -1593,6 +1799,8 @@ AUTHORITY_SUBTYPES = {
 
 
 DEFAULT_USER_PREFERENCES = {
+    "first_name": None,
+    "last_name": None,
     "preferred_location": None,
     "user_type": None,
     "user_subtype": None,
@@ -1606,17 +1814,73 @@ def normaliser_preferences_utilisateur(
 ):
     """
     Construit un profil utilisateur propre et validé.
+
+    Les informations personnelles sont facultatives.
+    Les préférences existantes restent compatibles
+    avec les profils non personnalisés.
     """
+
+    # ========================================================
+    # INITIALISATION DES PRÉFÉRENCES
+    # ========================================================
 
     preferences = dict(
         DEFAULT_USER_PREFERENCES
     )
+
+    # Évite de partager la liste par défaut
+    # entre plusieurs profils utilisateur.
+    preferences["interests"] = []
 
     if user_preferences:
 
         preferences.update(
             user_preferences
         )
+
+    # ========================================================
+    # NORMALISATION DU PRÉNOM ET DU NOM
+    # ========================================================
+
+    for champ in (
+        "first_name",
+        "last_name"
+    ):
+
+        valeur = preferences.get(
+            champ
+        )
+
+        if valeur is None:
+
+            preferences[champ] = None
+
+            continue
+
+        if not isinstance(
+            valeur,
+            str
+        ):
+
+            raise TypeError(
+                f"{champ} doit être une chaîne de caractères."
+            )
+
+        # Suppression des espaces inutiles.
+        # Les accents et la casse sont conservés.
+        valeur = " ".join(
+            valeur.split()
+        )
+
+        preferences[champ] = (
+            valeur
+            if valeur
+            else None
+        )
+
+    # ========================================================
+    # VALIDATION DU TYPE UTILISATEUR
+    # ========================================================
 
     user_type = preferences.get(
         "user_type"
@@ -1631,6 +1895,10 @@ def normaliser_preferences_utilisateur(
         raise ValueError(
             f"Type utilisateur invalide : {user_type}"
         )
+
+    # ========================================================
+    # VALIDATION DU SOUS-TYPE D'AUTORITÉ
+    # ========================================================
 
     user_subtype = preferences.get(
         "user_subtype"
@@ -2013,6 +2281,194 @@ def enrichir_requete_contexte(
                     "user_type"
                 )
 
+
+    
+    # --------------------------------------------------------
+    # Continuité d'un domaine maritime déjà établi
+    # --------------------------------------------------------
+
+    domaines_suivi = {
+        INTENT_PECHE_ARTISANALE: "pêche artisanale",
+        INTENT_NAVIGATION_COTIERE: "navigation côtière",
+        INTENT_MARINE_NATIONALE: "marine nationale",
+    }
+
+    domaine_precedent = domaines_suivi.get(
+        session_context.get("last_intent")
+    )
+
+    if domaine_precedent and est_requete_de_suivi(query):
+
+        categorie_demandee = (
+            retriever.detecter_categories_requete(query)
+        )
+
+        categorie_precise = (
+            categorie_demandee.get("mode") == "explicit"
+            and len(
+                categorie_demandee.get("categories", [])
+            ) == 1
+        )
+
+        meteo_generale_explicite = bool(
+            re.search(
+                r"\bmeteo(?:rologie)?\b",
+                query_norm
+            )
+        )
+
+        suivi_meteo_ou_temporel = (
+            correspond_a_un_pattern(
+                query_norm,
+                PATTERNS_DONNEES_METEO
+            )
+            or re.search(
+                r"\b(?:demain|apres demain|aujourd hui|hier)\b",
+                query_norm
+            )
+            or re.search(
+                r"\b(?:marees?|phenomenes?)\b",
+                query_norm
+            )
+        )
+
+        if (
+            suivi_meteo_ou_temporel
+            and not categorie_precise
+            and not meteo_generale_explicite
+            and not demande_conditions_generique
+        ):
+            effective_query = (
+                effective_query.rstrip(" ?")
+                + f" pour la {domaine_precedent} ?"
+            )
+
+            context_used = True
+            context_sources.append("session_intent")
+
+    
+    # ========================================================
+    # SUIVI TEMPOREL D'UN SUJET MARITIME
+    # ========================================================
+
+    sujet_maritime = session_context.get(
+        "last_maritime_subject"
+    )
+
+    suivi_temporel_seul = (
+        re.fullmatch(
+            (
+                r"(?:et\s+)?"
+                r"(?:demain|apres demain|aujourd hui|hier|"
+                r"ce matin|ce soir|cette nuit|"
+                r"cet apres midi|maintenant)"
+            ),
+            query_norm,
+        )
+        is not None
+    )
+
+
+    # Suivi ne contenant qu'un changement de lieu,
+    # de date, ou les deux.
+    suivi_lieu_ou_date_seul = False
+
+    if (
+        isinstance(sujet_maritime, str)
+        and sujet_maritime.strip()
+        and not suivi_temporel_seul
+        and est_requete_de_suivi(query)
+    ):
+        reste = query_norm
+        information_detectee = False
+
+        # Retirer la localite explicitement reconnue.
+        if explicit_location:
+            localite_norm = normaliser_requete_agent(
+                explicit_location
+            )
+
+            reste, nombre = re.subn(
+                rf"(?<!\w){re.escape(localite_norm)}(?!\w)",
+                " ",
+                reste,
+                count=1,
+            )
+
+            information_detectee |= nombre > 0
+
+        # Utiliser le resolveur temporel existant.
+        temporalite = retriever.resoudre_temporalite(query)
+
+        mode = temporalite.get("mode")
+        expression = temporalite.get("expression")
+
+        temps_explicite = (
+            mode in {
+                "relative",
+                "explicit",
+                "publication",
+                "duration",
+            }
+            or (
+                mode == "current"
+                and expression == "aujourd'hui"
+            )
+        )
+
+        if temps_explicite and isinstance(expression, str):
+            expression_norm = normaliser_requete_agent(
+                expression
+            )
+
+            reste, nombre = re.subn(
+                rf"(?<!\w){re.escape(expression_norm)}(?!\w)",
+                " ",
+                reste,
+                count=1,
+            )
+
+            information_detectee |= nombre > 0
+
+        # Une fois le lieu et la date retires,
+        # il ne doit rester que des mots de liaison.
+        mots_autorises = {
+            "et", "a", "le", "la", "de", "du",
+            "au", "aux", "en", "pour", "dans",
+            "vers",
+        }
+
+        suivi_lieu_ou_date_seul = (
+            information_detectee
+            and all(
+                mot in mots_autorises
+                for mot in reste.split()
+            )
+        )
+
+
+    if (
+        isinstance(sujet_maritime, str)
+        and sujet_maritime.strip()
+        and (
+            suivi_temporel_seul
+            or suivi_lieu_ou_date_seul
+        )
+    ):
+        effective_query = (
+            effective_query.rstrip(" ?")
+            + f" concernant le phénomène "
+            + f"« {sujet_maritime.strip()} » ?"
+        )
+
+        context_used = True
+
+        if "session_maritime_subject" not in context_sources:
+            context_sources.append(
+                "session_maritime_subject"
+            )
+
+
     return {
 
         "query":
@@ -2112,6 +2568,55 @@ def mettre_a_jour_contexte_session(
         ] = decision[
             "intent"
         ]
+
+    
+    # Conserver le sujet d'une demande maritime
+    # lorsque plusieurs categories documentaires
+    # sont admissibles sans domaine explicite.
+
+    if decision is not None:
+        sujet_maritime = None
+
+        if decision.get("route") == ROUTE_RAG:
+            requete_effective = (
+                contextualisation.get("effective_query")
+                or contextualisation.get("query")
+                or ""
+            )
+
+            categories = (
+                retriever.detecter_categories_requete(
+                    requete_effective
+                ).get("categories", [])
+            )
+
+            if set(categories) == {
+                "navigation_cotiere",
+                "marine_nationale",
+            }:
+                concepts = (
+                    lexique_meteo.reconnaitre_concepts_meteo(
+                        requete_effective
+                    )
+                )
+
+                sujets_marins = [
+                    element["concept"]
+                    for element in concepts
+                    if element.get("famille") == "marine"
+                ]
+
+                if sujets_marins:
+                    sujet_maritime = sujets_marins[0]
+
+        if sujet_maritime:
+            contexte["last_maritime_subject"] = sujet_maritime
+        else:
+            contexte.pop(
+                "last_maritime_subject",
+                None
+            )
+
 
     return contexte
 
@@ -2715,13 +3220,12 @@ def node_classifier(
         False
     )
 
-    decision[
-        "context_used"
-    ] = state[
-        "contextualisation"
-    ][
-        "context_used"
-    ]
+    decision["context_used"] = bool(
+        decision.get("context_used", False)
+        or state["contextualisation"].get(
+            "context_used", False
+        )
+    )
 
     return {
         "decision":
@@ -2737,34 +3241,161 @@ def node_finaliser(
     state: AgentState
 ):
     """
-    Met à jour la mémoire conversationnelle courte.
+    Finalise la décision de l'agent.
+
+    Met à jour la mémoire conversationnelle courte
+    et détermine si la personnalisation doit être
+    proposée à l'utilisateur.
     """
 
-    nouveau_contexte = (
-        mettre_a_jour_contexte_session(
+    # ========================================================
+    # 1. INFORMATIONS DE SESSION
+    # ========================================================
 
-            session_context=
-                state.get(
-                    "session_context",
-                    {}
-                ),
+    session_context = dict(
+        state.get("session_context") or {}
+    )
 
-            contextualisation=
-                state[
+    preferences = normaliser_preferences_utilisateur(
+        state.get("user_preferences")
+    )
+
+    decision = dict(
+        state["decision"]
+    )
+
+    # ========================================================
+    # 2. MISE À JOUR DU CONTEXTE CONVERSATIONNEL
+    # ========================================================
+
+    # Une action de personnalisation ne constitue pas
+    # une nouvelle demande météorologique.
+    #
+    # Elle ne doit donc pas remplacer la dernière
+    # intention ni supprimer le contexte maritime.
+
+    if decision.get("intent") == INTENT_PERSONALIZATION:
+
+        nouveau_contexte = session_context
+
+    else:
+
+        nouveau_contexte = (
+            mettre_a_jour_contexte_session(
+
+                session_context=session_context,
+
+                contextualisation=state[
                     "contextualisation"
                 ],
 
-            decision=
-                state.get(
-                    "decision"
-                )
+                decision=decision
+            )
         )
+
+    # ========================================================
+    # 3. ÉTAT DE LA PERSONNALISATION
+    # ========================================================
+
+    identite_disponible = bool(
+        preferences.get("first_name")
+        or preferences.get("last_name")
     )
+
+     # --------------------------------------------------------
+    # État permanent de la personnalisation
+    # --------------------------------------------------------
+
+    proposition_persistante = preferences.get(
+        "personalization_offer_seen"
+    )
+
+    # Lorsque la couche applicative fournit l'état permanent,
+    # celui-ci est prioritaire sur la mémoire LangGraph.
+
+    if isinstance(
+        proposition_persistante,
+        bool
+    ):
+
+        proposition_deja_effectuee = (
+            proposition_persistante
+        )
+
+    # En l'absence d'un état permanent, conserver
+    # le fonctionnement actuel de la session.
+
+    else:
+
+        proposition_deja_effectuee = bool(
+            session_context.get(
+                "personalization_offer_seen",
+                False
+            )
+        )
+
+    action_personnalisation = decision.get(
+        "personalization_action"
+    )
+
+    # Par défaut, aucune nouvelle proposition.
+    decision["offer_personalization"] = False
+
+    # ========================================================
+    # 4. UTILISATEUR DÉJÀ PERSONNALISÉ
+    # ========================================================
+
+    if identite_disponible:
+
+        nouveau_contexte[
+            "personalization_offer_seen"
+        ] = True
+
+    # ========================================================
+    # 5. ACTION EXPLICITE DE PERSONNALISATION
+    # ========================================================
+
+    elif action_personnalisation in {
+        "open_personalization",
+        "skip_personalization",
+    }:
+
+        nouveau_contexte[
+            "personalization_offer_seen"
+        ] = True
+
+    # ========================================================
+    # 6. PREMIÈRE PROPOSITION
+    # ========================================================
+
+    elif (
+        not proposition_deja_effectuee
+        and decision.get("route") in {
+            ROUTE_STATIC,
+            ROUTE_RAG,
+            ROUTE_DIRECT_LLM,
+        }
+    ):
+
+        decision[
+            "offer_personalization"
+        ] = True
+
+        nouveau_contexte[
+            "personalization_offer_seen"
+        ] = True
+
+    # ========================================================
+    # 7. SORTIE DU NŒUD
+    # ========================================================
 
     return {
 
         "session_context":
-            nouveau_contexte
+            nouveau_contexte,
+
+        "decision":
+            decision,
     }
 
 
@@ -2988,6 +3619,46 @@ def analyze_query(
         }
     }
 
+    
+    # ========================================================
+    # VALIDATION DES DATES AVANT LANGGRAPH
+    # ========================================================
+
+    try:
+        retriever.resoudre_temporalite(query)
+
+    except retriever.DateMeteoInvalide:
+        decision = construire_decision_agent(
+            query=query,
+            route=ROUTE_CLARIFY,
+            intent=INTENT_UNKNOWN,
+            needs_retrieval=False,
+            needs_visual=False,
+            needs_clarification=True,
+            clarification_message=(
+                "La date indiquée n'est pas valide. "
+                "Pouvez-vous préciser une date correcte ?"
+            ),
+            offer_personalization=False,
+            context_used=False,
+            confidence=1.0,
+        )
+
+        return {
+            **decision,
+            "effective_query": query,
+            "source_requires_visual": False,
+            "use_multimodal": False,
+            "first_name": None,
+            "last_name": None,
+            "resolved_location": None,
+            "user_type": None,
+            "user_subtype": None,
+            "interests": [],
+            "detail_level": "normal",
+        }
+
+
     # ========================================================
     # 4. EXÉCUTION LANGGRAPH
     # ========================================================
@@ -3027,6 +3698,12 @@ def analyze_query(
     contextualisation = state.get(
         "contextualisation",
         {}
+    )
+
+    # Informations personnelles disponibles
+    # dans la session utilisateur.
+    preferences = normaliser_preferences_utilisateur(
+        state.get("user_preferences")
     )
 
     # ========================================================
@@ -3107,6 +3784,20 @@ def analyze_query(
         # ----------------------------------------------------
         # Informations destinées à generation.py
         # ----------------------------------------------------
+        "first_name":
+            preferences.get(
+                "first_name"
+            ),
+
+        "last_name":
+            preferences.get(
+                "last_name"
+            ),
+
+        "resolved_location":
+            contextualisation.get(
+                "resolved_location"
+            ),
 
         "resolved_location":
             contextualisation.get(

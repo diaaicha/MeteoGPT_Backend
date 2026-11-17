@@ -5,6 +5,9 @@ from fastapi.testclient import TestClient
 from backend.app.main import app
 from backend.app.api.routes import whatsapp as whatsapp_route
 import pytest
+import hashlib
+import hmac
+import json
 
 @pytest.fixture(autouse=True)
 def reset_whatsapp_message_deduplication():
@@ -35,6 +38,50 @@ def reset_whatsapp_message_deduplication():
         )
 
 client = TestClient(app)
+
+
+
+
+
+
+# ============================================================
+# SIGNATURE DES WEBHOOKS SIMULÉS
+# ============================================================
+
+TEST_WEBHOOK_SECRET = "secret-webhook-test-local"
+
+
+def post_webhook_signe(client, payload):
+    """
+    Envoie une requête de test WhatsApp
+    avec une signature HMAC-SHA256 valide.
+
+    Aucune clé Meta réelle n'est utilisée.
+    """
+
+    raw_payload = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+    signature = hmac.new(
+        TEST_WEBHOOK_SECRET.encode("utf-8"),
+        raw_payload,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return client.post(
+        "/api/v1/whatsapp/webhook",
+        content=raw_payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Hub-Signature-256": (
+                "sha256=" + signature
+            ),
+        },
+    )
 
 
 def test_whatsapp_webhook_verification_success(
@@ -70,6 +117,7 @@ def test_whatsapp_webhook_rejects_invalid_token(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="correct-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -96,6 +144,7 @@ def test_whatsapp_webhook_disabled(
     settings = SimpleNamespace(
         enable_whatsapp=False,
         whatsapp_verify_token="test-verify-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -264,6 +313,7 @@ def test_whatsapp_webhook_receives_text_message(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="test-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -310,9 +360,9 @@ def test_whatsapp_webhook_receives_text_message(
         ],
     }
 
-    response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    response = post_webhook_signe(
+        client,
+        payload,
     )
 
     assert response.status_code == 200
@@ -329,6 +379,7 @@ def test_whatsapp_webhook_accepts_event_without_text_message(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="test-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -337,11 +388,10 @@ def test_whatsapp_webhook_accepts_event_without_text_message(
         lambda: settings,
     )
 
-    response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json={
-            "object":
-                "whatsapp_business_account",
+    response = post_webhook_signe(
+        client,
+        {
+            "object": "whatsapp_business_account",
             "entry": [],
         },
     )
@@ -444,6 +494,7 @@ def test_whatsapp_webhook_schedules_text_processing(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="test-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -495,9 +546,9 @@ def test_whatsapp_webhook_schedules_text_processing(
         ],
     }
 
-    response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    response = post_webhook_signe(
+        client,
+        payload,
     )
 
     assert response.status_code == 200
@@ -1086,6 +1137,7 @@ def test_whatsapp_webhook_schedules_audio_processing(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="test-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -1142,9 +1194,9 @@ def test_whatsapp_webhook_schedules_audio_processing(
         ],
     }
 
-    response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    response = post_webhook_signe(
+        client,
+        payload,
     )
 
     assert response.status_code == 200
@@ -1188,6 +1240,7 @@ def test_whatsapp_audio_flow_end_to_end(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="test-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -1430,9 +1483,9 @@ def test_whatsapp_audio_flow_end_to_end(
         ],
     }
 
-    response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    response = post_webhook_signe(
+        client,
+        payload,
     )
 
     assert response.status_code == 200
@@ -2041,6 +2094,7 @@ def test_whatsapp_webhook_deduplicates_text_message(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="test-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -2093,14 +2147,14 @@ def test_whatsapp_webhook_deduplicates_text_message(
         ],
     }
 
-    first_response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    first_response = post_webhook_signe(
+        client,
+        payload,
     )
 
-    second_response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    second_response = post_webhook_signe(
+        client,
+        payload,
     )
 
     assert first_response.status_code == 200
@@ -2117,6 +2171,7 @@ def test_whatsapp_webhook_deduplicates_audio_message(
     settings = SimpleNamespace(
         enable_whatsapp=True,
         whatsapp_verify_token="test-token",
+        whatsapp_app_secret=TEST_WEBHOOK_SECRET,
     )
 
     monkeypatch.setattr(
@@ -2173,14 +2228,14 @@ def test_whatsapp_webhook_deduplicates_audio_message(
         ],
     }
 
-    first_response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    first_response = post_webhook_signe(
+        client,
+        payload,
     )
 
-    second_response = client.post(
-        "/api/v1/whatsapp/webhook",
-        json=payload,
+    second_response = post_webhook_signe(
+        client,
+        payload,
     )
 
     assert first_response.status_code == 200

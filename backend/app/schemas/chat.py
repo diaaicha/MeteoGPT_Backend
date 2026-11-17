@@ -87,6 +87,11 @@ class ChatResponse(BaseModel):
 
     intent: str | None = None
 
+    # Informations de personnalisation
+    offer_personalization: bool = False
+
+    personalization_action: str | None = None
+
     generation_mode: str | None = None
 
     grounded: bool = False

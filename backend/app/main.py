@@ -1,5 +1,9 @@
 from fastapi import FastAPI
 
+from backend.app.api.routes.personalization import (
+    router as personalization_router,
+)
+
 from backend.app.api.routes.health import router as health_router
 from backend.app.core.config import get_settings
 from backend.app.api.routes.chat import router as chat_router
@@ -72,6 +76,11 @@ def create_app() -> FastAPI:
     application.include_router(
         admin_update_router,
         prefix=settings.api_v1_prefix,
+    )
+
+    application.include_router(
+        personalization_router,
+        prefix="/api/v1",
     )
 
     return application

@@ -1,0 +1,120 @@
+famille;concept;variantes
+precipitations;pluie;pluies|pluvieux|pluvieuse|pleuvoir|pleut|pleuvra|pleuvait|pleuvront
+precipitations;averse;averses
+precipitations;bruine;crachin
+precipitations;précipitation;precipitations
+precipitations;grêle;grele|grêlons|grelons
+precipitations;neige;neiges
+precipitations;pluie verglaçante;pluies verglaçantes
+precipitations;cumul de pluie;cumul pluviométrique|cumuls pluviométriques
+precipitations;pluie torrentielle;pluies torrentielles
+precipitations;épisode pluvieux;episode pluvieux
+orages;orage;orages
+orages;orage supercellulaire;supercellule|orage supercellulaire
+orages;foudre;foudres
+orages;éclair;éclairs
+orages;tonnerre;tonnerres
+orages;ligne de grains;ligne de grain|lignes de grains
+orages;cellule orageuse;cellules orageuses
+orages;front de rafale;fronts de rafale
+orages;microrafale;micro rafale|micro rafales
+orages;rafale descendante;rafales descendantes
+vent;vent;vents
+vent;rafale;rafales
+vent;brise;brises
+vent;brise de mer;brises de mer
+vent;brise de terre;brises de terre
+vent;alizé;alizes|alizés
+vent;harmattan;
+vent;bourrasque;bourrasques
+vent;cisaillement du vent;cisaillement de vent
+vent;direction du vent;
+vent;vitesse du vent;
+vent;échelle de Beaufort;beaufort
+vent;tornade;tornades
+vent;cyclone;cyclones
+vent;ouragan;ouragans
+vent;tempête;tempetes|tempêtes
+atmosphere;pression atmosphérique;pression atmospherique
+atmosphere;dépression atmosphérique;depression atmospherique
+atmosphere;anticyclone;anticyclones
+atmosphere;isobare;isobares
+atmosphere;thalweg;talweg
+atmosphere;dorsale anticyclonique;dorsale
+atmosphere;front froid;fronts froids
+atmosphere;front chaud;fronts chauds
+atmosphere;convection;convections
+atmosphere;onde tropicale;ondes tropicales
+atmosphere;zone de convergence intertropicale;zcit
+atmosphere;masse d'air;masses d'air
+atmosphere;inversion thermique;inversion de température
+nuages;nuage;nuages
+nuages;cumulus;
+nuages;cumulonimbus;
+nuages;stratus;
+nuages;cirrus;
+nuages;altocumulus;
+nuages;nébulosité;nebulosite
+nuages;couverture nuageuse;
+nuages;ciel couvert;
+nuages;éclaircie;eclaircies|éclaircies
+visibilite;brume;brumes
+visibilite;brume sèche;brumes sèches
+visibilite;brouillard;brouillards
+visibilite;brouillard givrant;
+visibilite;poussière;poussieres|poussières
+visibilite;poussières sahariennes;poussieres sahariennes
+visibilite;sable en suspension;
+visibilite;haboob;
+visibilite;visibilité;visibilite
+visibilite;aérosol;aerosols|aérosols
+visibilite;brume de poussière;
+temperature;température;temperatures|températures
+temperature;chaleur;chaleurs
+temperature;canicule;canicules
+temperature;vague de chaleur;vagues de chaleur
+temperature;dôme de chaleur;dome de chaleur
+temperature;froid;
+temperature;fraîcheur;fraicheur
+temperature;température ressentie;
+temperature;amplitude thermique;
+temperature;point de rosée;point de rosee
+temperature;humidité;humidite
+temperature;humidité relative;humidite relative
+temperature;stress thermique;
+temperature;indice de chaleur;
+marine;houle;houles
+marine;houle significative;hauteur significative de houle
+marine;vague;vagues
+marine;hauteur significative des vagues;hauteur significative
+marine;clapot;clapots
+marine;mer du vent;
+marine;mer agitée;mer agitee
+marine;mer peu agitée;mer peu agitee
+marine;marée;marees|marées
+marine;marée haute;pleine mer|pleines mers
+marine;marée basse;basse mer|basses mers
+marine;courant marin;courants marins
+marine;submersion marine;
+marine;déferlement;deferlement
+marine;surcote;
+climat;mousson;moussons
+climat;saison des pluies;hivernage
+climat;sécheresse;secheresse
+climat;climat;climats
+climat;changement climatique;réchauffement climatique
+climat;variabilité climatique;variabilite climatique
+climat;anomalie climatique;
+climat;oscillation australe;
+climat;el niño;el nino
+climat;la niña;la nina
+observations;météorologie;meteo|météo
+observations;prévision météorologique;prévisions météorologiques
+observations;station météorologique;stations météorologiques
+observations;pluviomètre;pluviometre
+observations;anémomètre;anemometre
+observations;baromètre;barometre
+observations;thermomètre;thermometre
+observations;radar météorologique;radar météo
+observations;image satellite;images satellites
+observations;modèle numérique;modèle de prévision
